@@ -214,60 +214,8 @@ async function init() {
         urlInput.value = localStorage.getItem("custom_backend_url") || "";
     }
     
-    // Dynamic Geolocation Detection to center map on user's exact device location (with terrain altitude correction)
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                ANCHOR_LAT = position.coords.latitude;
-                ANCHOR_LON = position.coords.longitude;
-                
-                console.log(`Device location detected: Lat ${ANCHOR_LAT}, Lon ${ANCHOR_LON}`);
-                
-                const updateLocationAndRender = () => {
-                    setupCesiumAnchor();
-                    renderParcelsInCesium();
-                    focusCesiumBuilding();
-                    
-                    // Fetch exact footprint geometry for device location
-                    fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
-                        currentOverpassFootprint = geometry;
-                        const area = getPolygonArea(geometry);
-                        allParcelsData.forEach(p => {
-                            p.volume_m3 = Math.round(area * 3.2);
-                        });
-                        renderParcelsInCesium();
-                    }, () => {});
-                };
-
-                if (isCesiumInitialized && cesiumViewer) {
-                    const pos = Cesium.Cartographic.fromDegrees(ANCHOR_LON, ANCHOR_LAT);
-                    let height = cesiumViewer.scene.globe.getHeight(pos) || 0.0;
-                    
-                    if (cesiumViewer.terrainProvider) {
-                        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, [pos])
-                            .then((updatedPositions) => {
-                                ANCHOR_HEIGHT = updatedPositions[0].height || height;
-                                updateLocationAndRender();
-                            })
-                            .catch(() => {
-                                ANCHOR_HEIGHT = height;
-                                updateLocationAndRender();
-                            });
-                    } else {
-                        ANCHOR_HEIGHT = height;
-                        updateLocationAndRender();
-                    }
-                } else {
-                    ANCHOR_HEIGHT = 100.0; // Placeholder until Cesium is initialized
-                }
-                showToast("📍 Map updated to your device's exact location!");
-            },
-            (error) => {
-                console.warn("Geolocation access denied or timed out. Defaulting to Sree Kanteerava Stadium.", error);
-            },
-            { enableHighAccuracy: true, timeout: 5000 }
-        );
-    }
+    // Geolocation at startup is disabled so map defaults to Sree Kanteerava Stadium. User can sync via GPS button.
+    console.log("Map initialized. Defaulting to Sree Kanteerava Stadium anchor coordinates.");
 
 
     const container = document.getElementById("canvas-container");
@@ -3053,9 +3001,73 @@ function syncMapToGPS() {
     );
 }
 
+function resetToKanteeravaStadium() {
+    ANCHOR_LAT = 12.96945;
+    ANCHOR_LON = 77.5927;
+    ANCHOR_HEIGHT = 920.0;
+    
+    showToast("🏟️ Resetting map to Sree Kanteerava Stadium...");
+    
+    if (isCesiumInitialized && cesiumViewer) {
+        setupCesiumAnchor();
+        currentOverpassFootprint = null;
+        
+        // Procedurally build Sree Kanteerava Stadium floors first
+        const bName = "Sree Kanteerava Stadium";
+        const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
+        allParcelsData = proceduralData;
+        renderParcelsInCesium();
+        if (proceduralData.length > 0) {
+            selectParcelByData(proceduralData[0]);
+        }
+        
+        // Fetch exact footprint from OpenStreetMap Overpass
+        fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+            currentOverpassFootprint = geometry;
+            const area = getPolygonArea(geometry);
+            
+            let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
+            let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
+            
+            const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, bName, realLevels);
+            generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
+            allParcelsData = generated;
+            renderParcelsInCesium();
+            if (generated.length > 0) {
+                selectParcelByData(generated[0]);
+            }
+        }, () => {});
+        
+        // Fetch geocoded address
+        const startupNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}`;
+        fetch(startupNominatimUrl)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    currentGeocodedAddress = data.display_name;
+                    const addrEl = document.getElementById("real-osm-address");
+                    if (addrEl) addrEl.innerText = data.display_name;
+                }
+            }).catch(() => {});
+            
+        // Fly camera smoothly to Sree Kanteerava Stadium
+        const targetCartesian = localToGlobal(40, -80, 95);
+        smoothCesiumFlyTo({
+            destination: targetCartesian,
+            orientation: {
+                heading: Cesium.Math.toRadians(330),
+                pitch: Cesium.Math.toRadians(-35),
+                roll: 0.0
+            },
+            duration: 2.0
+        });
+    }
+}
+
 window.toggleCesiumControlsMinimize = toggleCesiumControlsMinimize;
 window.makeElementDraggable = makeElementDraggable;
 window.syncMapToGPS = syncMapToGPS;
+window.resetToKanteeravaStadium = resetToKanteeravaStadium;
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(init, 100);
