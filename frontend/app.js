@@ -1783,8 +1783,11 @@ function renderParcelsInCesium() {
         const d = b.max_y - b.min_y;
         
         // Determine the effective shape to use for local-coord fallback
-        // In 'auto' mode, prefer currentOverpassFootprint (handled below). For local fallback, use rectangle.
-        const effectiveCageShape = (cesiumFootprintShape === 'auto') ? 'rectangle' : cesiumFootprintShape;
+        // In 'auto' mode, use real OSM polygon if available; otherwise auto-estimate shape based on building name
+        let effectiveCageShape = cesiumFootprintShape;
+        if (cesiumFootprintShape === 'auto') {
+            effectiveCageShape = getEstimatedShape(buildingName);
+        }
         
         let localCoords = [];
         if (effectiveCageShape === 'oval') {
@@ -1923,8 +1926,11 @@ function renderParcelsInCesium() {
         const w = b.max_x - b.min_x;
         const d = b.max_y - b.min_y;
         
-        // For individual floors: use effective shape (auto -> rectangle fallback)
-        const effectiveFloorShape = (cesiumFootprintShape === 'auto') ? 'rectangle' : cesiumFootprintShape;
+        // For individual floors: use real OSM footprint if available, or auto-estimated shape based on building name
+        let effectiveFloorShape = cesiumFootprintShape;
+        if (cesiumFootprintShape === 'auto') {
+            effectiveFloorShape = getEstimatedShape(p.building_name);
+        }
         
         let localCoords = [];
         if (effectiveFloorShape === 'oval') {
