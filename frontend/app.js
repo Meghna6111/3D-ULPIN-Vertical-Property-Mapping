@@ -248,7 +248,8 @@ async function init() {
                         let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
                         const actualName = tags['name'] || tags['addr:housename'] || "Device Location Building";
                         
-                        const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels);
+                        const polyDims = getPolygonBoundsInMeters(geometry);
+                        const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels, polyDims);
                         generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
                         allParcelsData = generated;
                         renderParcelsInCesium();
@@ -2322,7 +2323,8 @@ function setupCesiumInteraction() {
                             realHeight = realLevels * 3.2;
                         }
                         
-                        allParcelsData = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels);
+                        const polyDims = getPolygonBoundsInMeters(geometry);
+                        allParcelsData = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels, polyDims);
                         
                         // Update volume based on the exact footprint shape
                         allParcelsData.forEach(p => {
@@ -2426,15 +2428,42 @@ function getEstimatedDimensions(name, height) {
         return { width: 28.0, depth: 20.0 };
     }
     
-    // Standard residential apartments/houses
-    return { width: 16.0, depth: 16.0 };
+    // Standard residential / city buildings
+    return { width: 30.0, depth: 22.0 };
 }
 
-function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors = null) {
+function getPolygonBoundsInMeters(coords) {
+    if (!coords || coords.length < 3) return { width: 30.0, depth: 22.0 };
+    
+    const lats = coords.map(c => c.lat);
+    const lons = coords.map(c => c.lon);
+    const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+    
+    const latMid = avgLat * Math.PI / 180;
+    const mPerDegLat = 111132.954;
+    const mPerDegLon = 111412.84 * Math.cos(latMid);
+    
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    coords.forEach(pt => {
+        const x = (pt.lon - avgLon) * mPerDegLon;
+        const y = (pt.lat - avgLat) * mPerDegLat;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    });
+    
+    const width = Math.max(14.0, maxX - minX);
+    const depth = Math.max(10.0, maxY - minY);
+    return { width, depth };
+}
+
+function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors = null, customDims = null) {
     const numFloors = explicitFloors !== null ? explicitFloors : Math.max(1, Math.round(heightMeters / 3.2));
     const generatedParcels = [];
     
-    const dims = getEstimatedDimensions(name, heightMeters);
+    const dims = customDims || getEstimatedDimensions(name, heightMeters);
     const w = dims.width;
     const d = dims.depth;
     
@@ -3085,7 +3114,8 @@ function syncMapToGPS() {
                         let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
                         const bName = tags['name'] || tags['addr:housename'] || "My GPS Building";
                         
-                        const generated = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels);
+                        const polyDims = getPolygonBoundsInMeters(geometry);
+                        const generated = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels, polyDims);
                         generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
                         allParcelsData = generated;
                         renderParcelsInCesium();
