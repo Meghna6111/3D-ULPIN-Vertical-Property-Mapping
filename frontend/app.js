@@ -23,7 +23,7 @@ let cesiumMouseHandler = null;
 let cesiumHoveredEntity = null;
 let selectedOsmFeature = null;
 let cesiumRotationAngle = 0;
-let cesiumFootprintShape = "oval";
+let cesiumFootprintShape = "auto";
 let currentOverpassFootprint = null;
 
 let ANCHOR_LAT = 12.96945;
@@ -1782,13 +1782,17 @@ function renderParcelsInCesium() {
         const w = b.max_x - b.min_x;
         const d = b.max_y - b.min_y;
         
+        // Determine the effective shape to use for local-coord fallback
+        // In 'auto' mode, prefer currentOverpassFootprint (handled below). For local fallback, use rectangle.
+        const effectiveCageShape = (cesiumFootprintShape === 'auto') ? 'rectangle' : cesiumFootprintShape;
+        
         let localCoords = [];
-        if (cesiumFootprintShape === 'oval') {
+        if (effectiveCageShape === 'oval') {
             for (let i = 0; i < 16; i++) {
                 const angle = (i / 16) * Math.PI * 2;
                 localCoords.push([Math.cos(angle) * (w/2), Math.sin(angle) * (d/2)]);
             }
-        } else if (cesiumFootprintShape === 'lshape') {
+        } else if (effectiveCageShape === 'lshape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1797,7 +1801,7 @@ function renderParcelsInCesium() {
                 [0, d/2],
                 [-w/2, d/2]
             ];
-        } else if (cesiumFootprintShape === 'tshape') {
+        } else if (effectiveCageShape === 'tshape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1808,7 +1812,7 @@ function renderParcelsInCesium() {
                 [-w/6, -d/6],
                 [-w/2, -d/6]
             ];
-        } else if (cesiumFootprintShape === 'ushape') {
+        } else if (effectiveCageShape === 'ushape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1919,13 +1923,16 @@ function renderParcelsInCesium() {
         const w = b.max_x - b.min_x;
         const d = b.max_y - b.min_y;
         
+        // For individual floors: use effective shape (auto -> rectangle fallback)
+        const effectiveFloorShape = (cesiumFootprintShape === 'auto') ? 'rectangle' : cesiumFootprintShape;
+        
         let localCoords = [];
-        if (cesiumFootprintShape === 'oval') {
+        if (effectiveFloorShape === 'oval') {
             for (let i = 0; i < 16; i++) {
                 const angle = (i / 16) * Math.PI * 2;
                 localCoords.push([Math.cos(angle) * (w/2), Math.sin(angle) * (d/2)]);
             }
-        } else if (cesiumFootprintShape === 'lshape') {
+        } else if (effectiveFloorShape === 'lshape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1934,7 +1941,7 @@ function renderParcelsInCesium() {
                 [0, d/2],
                 [-w/2, d/2]
             ];
-        } else if (cesiumFootprintShape === 'tshape') {
+        } else if (effectiveFloorShape === 'tshape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1945,7 +1952,7 @@ function renderParcelsInCesium() {
                 [-w/6, -d/6],
                 [-w/2, -d/6]
             ];
-        } else if (cesiumFootprintShape === 'ushape') {
+        } else if (effectiveFloorShape === 'ushape') {
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -2266,12 +2273,12 @@ function setupCesiumInteraction() {
                         bHeight = 16.0; // Default height (approx 5 floors)
                     }
                     
-                    // Automatically estimate and set the footprint shape based on the building name/type (fallback)
-                    const initialShape = getEstimatedShape(bName);
-                    cesiumFootprintShape = initialShape;
+                    // Keep footprint shape set to 'auto' by default so real OSM shape is preferred
                     const dropdown = document.getElementById("select-footprint-shape");
-                    if (dropdown) {
-                        dropdown.value = initialShape;
+                    if (dropdown && cesiumFootprintShape === 'auto') {
+                        dropdown.value = 'auto';
+                    } else if (dropdown && cesiumFootprintShape !== 'auto') {
+                        dropdown.value = cesiumFootprintShape;
                     }
                     
                     // Dynamically generate 3D access and vertical property data for this clicked building
@@ -2288,6 +2295,10 @@ function setupCesiumInteraction() {
                     fetchBuildingFootprint(lat, lon, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
                         const area = getPolygonArea(geometry);
+                        
+                        // Set shape to auto to reflect real OSM footprint polygon
+                        cesiumFootprintShape = 'auto';
+                        if (dropdown) dropdown.value = 'auto';
                         
                         // Dynamically update building levels and height from real-world OSM tags
                         let realLevels = parseInt(tags['building:levels'] || tags['levels']);
@@ -2321,7 +2332,11 @@ function setupCesiumInteraction() {
                             selectParcelByData(currentSel);
                         }
                     }, () => {
-                        // Fallback: do nothing, procedural fallback is already rendered
+                        // Fallback: estimate shape based on building name if OSM footprint geometry is missing
+                        const fallbackShape = getEstimatedShape(bName);
+                        cesiumFootprintShape = fallbackShape;
+                        if (dropdown) dropdown.value = fallbackShape;
+                        renderParcelsInCesium();
                     });
 
                     const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${lat}&lon=${lon}`;
