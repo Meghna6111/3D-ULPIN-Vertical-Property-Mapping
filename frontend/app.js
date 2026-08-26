@@ -2619,7 +2619,20 @@ function updateCesiumFootprintShape(shape) {
         dropdown.value = shape;
     }
     
+    const firstParcel = allParcelsData[0];
+    const w = firstParcel ? (firstParcel.bounds.max_x - firstParcel.bounds.min_x) : 32.0;
+    const d = firstParcel ? (firstParcel.bounds.max_y - firstParcel.bounds.min_y) : 24.0;
+    
+    if (shape !== 'auto') {
+        currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, shape, w, d);
+    } else {
+        const bName = firstParcel ? firstParcel.building_name : "Interactive 3D Building";
+        const estimated = getEstimatedShape(bName);
+        currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, estimated, w, d);
+    }
+    
     renderParcelsInCesium();
+    showToast(`📐 3D Building footprint shape morphing to: ${shape.toUpperCase()}`);
 }
 window.updateCesiumFootprintShape = updateCesiumFootprintShape;
 

@@ -1050,16 +1050,25 @@ Carpet Area: 85.40 sqm, Clear Title.</textarea>
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-1">
-                    <div class="text-[10px] uppercase font-extrabold theme-text-muted tracking-wider">Footprint Shape</div>
-                    <select id="select-footprint-shape" onchange="updateCesiumFootprintShape(this.value)" class="border border-slate-300 dark:border-slate-600 rounded-xl px-2.5 py-1.5 text-[10px] font-bold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm theme-input">
-                        <option value="auto" selected>🌍 Real OSM Shape (Auto)</option>
-                        <option value="oval">Oval / Curved Stadium</option>
-                        <option value="rectangle">Rectangle (Standard)</option>
-                        <option value="lshape">L-Shape Corner</option>
-                        <option value="tshape">T-Shape Block</option>
-                        <option value="ushape">U-Shape / Court</option>
-                    </select>
+                <div class="space-y-2 pt-1">
+                    <div class="flex items-center justify-between">
+                        <div class="text-[10px] uppercase font-extrabold theme-text-muted tracking-wider">Footprint Shape</div>
+                        <select id="select-footprint-shape" onchange="updateCesiumFootprintShape(this.value)" class="border border-slate-300 dark:border-slate-600 rounded-xl px-2.5 py-1.5 text-[10px] font-bold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm theme-input">
+                            <option value="auto" selected>🌍 Real OSM Shape (Auto)</option>
+                            <option value="oval">Oval / Curved Stadium</option>
+                            <option value="rectangle">Rectangle (Standard)</option>
+                            <option value="lshape">L-Shape Corner</option>
+                            <option value="tshape">T-Shape Block</option>
+                            <option value="ushape">U-Shape / Court</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-5 gap-1 pt-1">
+                        <button onclick="updateCesiumFootprintShape('oval')" class="px-1.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-100 transition-all border border-indigo-200 dark:border-indigo-800">🟢 Oval</button>
+                        <button onclick="updateCesiumFootprintShape('lshape')" class="px-1.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-100 transition-all border border-indigo-200 dark:border-indigo-800">📐 L-Shape</button>
+                        <button onclick="updateCesiumFootprintShape('ushape')" class="px-1.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-100 transition-all border border-indigo-200 dark:border-indigo-800">🏛️ U-Shape</button>
+                        <button onclick="updateCesiumFootprintShape('tshape')" class="px-1.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-100 transition-all border border-indigo-200 dark:border-indigo-800">🔝 T-Shape</button>
+                        <button onclick="updateCesiumFootprintShape('rectangle')" class="px-1.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-100 transition-all border border-indigo-200 dark:border-indigo-800">⬛ Rect</button>
+                    </div>
                 </div>
             </div>
 
