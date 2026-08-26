@@ -2280,6 +2280,11 @@ function setupCesiumInteraction() {
                         bHeight = 16.0; // Default height (approx 5 floors)
                     }
                     
+                    // Immediately generate shape-shifted footprint based on building name/type
+                    const initialShape = getEstimatedShape(bName);
+                    const dims = getEstimatedDimensions(bName, bHeight);
+                    currentOverpassFootprint = createSyntheticFootprint(lat, lon, initialShape, dims.width, dims.depth);
+                    
                     // Keep footprint shape set to 'auto' by default so real OSM shape is preferred
                     const dropdown = document.getElementById("select-footprint-shape");
                     if (dropdown && cesiumFootprintShape === 'auto') {
@@ -2289,7 +2294,7 @@ function setupCesiumInteraction() {
                     }
                     
                     // Dynamically generate 3D access and vertical property data for this clicked building
-                    const generated = generate3DBuildingFloors(lat, lon, bHeight, bName);
+                    const generated = generate3DBuildingFloors(lat, lon, bHeight, bName, null, dims);
                     allParcelsData = generated;
                     
                     renderParcelsInCesium();
@@ -2340,10 +2345,10 @@ function setupCesiumInteraction() {
                             selectParcelByData(currentSel);
                         }
                     }, () => {
-                        // Fallback: estimate shape based on building name if OSM footprint geometry is missing
+                        // Fallback: use synthetic shape-shifted footprint based on building name/type
                         const fallbackShape = getEstimatedShape(bName);
-                        cesiumFootprintShape = fallbackShape;
-                        if (dropdown) dropdown.value = fallbackShape;
+                        const dims = getEstimatedDimensions(bName, bHeight);
+                        currentOverpassFootprint = createSyntheticFootprint(lat, lon, fallbackShape, dims.width, dims.depth);
                         renderParcelsInCesium();
                     });
 
@@ -2457,6 +2462,63 @@ function getPolygonBoundsInMeters(coords) {
     const width = Math.max(14.0, maxX - minX);
     const depth = Math.max(10.0, maxY - minY);
     return { width, depth };
+}
+
+function createSyntheticFootprint(lat, lon, shapeType, w = 32.0, d = 24.0) {
+    const latMid = lat * Math.PI / 180;
+    const mPerDegLat = 111132.954;
+    const mPerDegLon = 111412.84 * Math.cos(latMid);
+    
+    let localCoords = [];
+    if (shapeType === 'oval') {
+        for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2;
+            localCoords.push([Math.cos(angle) * (w / 2), Math.sin(angle) * (d / 2)]);
+        }
+    } else if (shapeType === 'lshape') {
+        localCoords = [
+            [-w/2, -d/2],
+            [w/2, -d/2],
+            [w/2, 0],
+            [0, 0],
+            [0, d/2],
+            [-w/2, d/2]
+        ];
+    } else if (shapeType === 'tshape') {
+        localCoords = [
+            [-w/2, -d/2],
+            [w/2, -d/2],
+            [w/2, -d/6],
+            [w/6, -d/6],
+            [w/6, d/2],
+            [-w/6, d/2],
+            [-w/6, -d/6],
+            [-w/2, -d/6]
+        ];
+    } else if (shapeType === 'ushape') {
+        localCoords = [
+            [-w/2, -d/2],
+            [w/2, -d/2],
+            [w/2, d/2],
+            [w/3, d/2],
+            [w/3, -d/6],
+            [-w/3, -d/6],
+            [-w/3, d/2],
+            [-w/2, d/2]
+        ];
+    } else {
+        localCoords = [
+            [-w/2, -d/2],
+            [w/2, -d/2],
+            [w/2, d/2],
+            [-w/2, d/2]
+        ];
+    }
+    
+    return localCoords.map(pt => ({
+        lat: lat + (pt[1] / mPerDegLat),
+        lon: lon + (pt[0] / mPerDegLon)
+    }));
 }
 
 function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors = null, customDims = null) {

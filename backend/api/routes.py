@@ -803,7 +803,7 @@ def get_config():
 def proxy_overpass(lat: float, lon: float):
     """Proxy Overpass API requests to bypass CORS restrictions in hosted environments."""
     import requests
-    url = f"https://overpass-api.de/api/interpreter?data=[out:json];way(around:50,{lat},{lon})[building];out geom;"
+    url = f"https://overpass-api.de/api/interpreter?data=[out:json];(way(around:100,{lat},{lon})[building];way(around:100,{lat},{lon})[\"building:part\"];way(around:100,{lat},{lon})[amenity];);out geom;"
     try:
         response = requests.get(url, timeout=10, headers={"User-Agent": "3D-ULPIN-Cadastre-GIS/1.0"})
         if response.ok:
