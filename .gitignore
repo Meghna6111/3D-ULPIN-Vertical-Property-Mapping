@@ -1,0 +1,10 @@
+venv/
+backend/venv/
+__pycache__/
+*.pyc
+.env
+*.prn
+*.db
+.pytest_cache/
+.firebase/
+.DS_Store
