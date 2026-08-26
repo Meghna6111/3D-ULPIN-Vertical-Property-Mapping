@@ -1828,7 +1828,8 @@ function renderParcelsInCesium() {
             ];
         }
 
-        if (currentOverpassFootprint) {
+        // Use currentOverpassFootprint ONLY when footprint shape mode is set to 'auto'
+        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
             const lats = currentOverpassFootprint.map(c => c.lat);
             const lons = currentOverpassFootprint.map(c => c.lon);
             const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
@@ -1985,7 +1986,7 @@ function renderParcelsInCesium() {
         const finalColor = isSelected ? Cesium.Color.CYAN.withAlpha(0.85) : color;
 
         let hierarchy;
-        if (currentOverpassFootprint) {
+        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
             if (cesiumRotationAngle !== 0) {
                 const lats = currentOverpassFootprint.map(c => c.lat);
                 const lons = currentOverpassFootprint.map(c => c.lon);
