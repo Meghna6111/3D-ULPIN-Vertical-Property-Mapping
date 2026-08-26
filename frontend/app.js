@@ -227,14 +227,9 @@ async function init() {
                     setupCesiumAnchor();
                     currentOverpassFootprint = null;
                     
-                    // Procedural generation for device location first
-                    const bName = "Device Location Building";
-                    const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
-                    allParcelsData = proceduralData;
+                    // Clear initially so we do not show any mock cylinders on startup by default
+                    allParcelsData = [];
                     renderParcelsInCesium();
-                    if (proceduralData.length > 0) {
-                        selectParcelByData(proceduralData[0]);
-                    }
                     
                     // Fetch exact footprint geometry for device location
                     fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
@@ -252,14 +247,19 @@ async function init() {
                         if (generated.length > 0) {
                             selectParcelByData(generated[0]);
                         }
-                    }, () => {});
+                    }, () => {
+                        // Footprint not found at user's current location (e.g. suburban NICE Road) -> leave the map clean!
+                        allParcelsData = [];
+                        renderParcelsInCesium();
+                        console.log("No OSM building footprint found at startup device location. Keeping map clean.");
+                    });
 
                     // Fetch address info via reverse geocoding
                     const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}`;
                     const directNominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}&format=json&zoom=18`;
                     
                     const handleGPSNominatim = (data) => {
-                        let realName = data.name || data.display_name || "Device Location Building";
+                        let realName = data.name || data.display_name || "Device Location";
                         if (realName.length > 45) realName = realName.substring(0, 45) + "...";
                         let fullAddress = data.display_name || "Unknown Location";
                         currentGeocodedAddress = fullAddress;
@@ -3023,12 +3023,9 @@ function syncMapToGPS() {
                     setupCesiumAnchor();
                     currentOverpassFootprint = null;
                     
-                    const proceduralData = generate3DBuildingFloors(lat, lon, 16.0, "My GPS Building");
-                    allParcelsData = proceduralData;
+                    // Clear initially so we do not show any mock cylinders by default
+                    allParcelsData = [];
                     renderParcelsInCesium();
-                    if (proceduralData.length > 0) {
-                        selectParcelByData(proceduralData[0]);
-                    }
                     
                     fetchBuildingFootprint(lat, lon, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
@@ -3045,7 +3042,12 @@ function syncMapToGPS() {
                         if (generated.length > 0) {
                             selectParcelByData(generated[0]);
                         }
-                    }, () => {});
+                    }, () => {
+                        // Clear mock data if no footprint is found
+                        allParcelsData = [];
+                        renderParcelsInCesium();
+                        showToast("ℹ️ No building footprint found at this location.");
+                    });
                     
                     const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${lat}&lon=${lon}`;
                     const directNominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18`;
