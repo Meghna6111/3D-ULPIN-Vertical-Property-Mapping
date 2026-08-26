@@ -2979,42 +2979,60 @@ function toggleCesiumControlsMinimize() {
 }
 
 function makeElementDraggable(elmnt, dragHandle) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    if (dragHandle) {
-        dragHandle.onmousedown = dragMouseDown;
-    } else {
-        elmnt.onmousedown = dragMouseDown;
-    }
+    let active = false;
+    let xOffset = 0;
+    let yOffset = 0;
 
-    function dragMouseDown(e) {
-        e = e || window.event;
-        const tag = e.target.tagName.toLowerCase();
-        if (tag === 'input' || tag === 'select' || tag === 'button' || tag === 'option' || e.target.closest('button')) {
+    const handle = dragHandle || elmnt;
+
+    handle.addEventListener("mousedown", dragStart, false);
+    document.addEventListener("mouseup", dragEnd, false);
+    document.addEventListener("mousemove", drag, false);
+
+    handle.addEventListener("touchstart", dragStart, { passive: false });
+    document.addEventListener("touchend", dragEnd, false);
+    document.addEventListener("touchmove", drag, { passive: false });
+
+    function dragStart(e) {
+        const target = e.target;
+        const tag = target.tagName ? target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'select' || tag === 'button' || tag === 'option' || target.closest('button')) {
             return;
         }
-        e.preventDefault();
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        document.onmouseup = closeDragElement;
-        document.onmousemove = elementDrag;
+
+        const clientX = e.type === "touchstart" ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type === "touchstart" ? e.touches[0].clientY : e.clientY;
+
+        const rect = elmnt.getBoundingClientRect();
+        xOffset = clientX - rect.left;
+        yOffset = clientY - rect.top;
+
+        active = true;
+        elmnt.style.transition = 'none';
+        document.body.style.userSelect = 'none';
     }
 
-    function elementDrag(e) {
-        e = e || window.event;
-        e.preventDefault();
-        pos1 = pos3 - e.clientX;
-        pos2 = pos4 - e.clientY;
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
-        elmnt.style.bottom = "auto";
-        elmnt.style.right = "auto";
+    function dragEnd() {
+        if (!active) return;
+        active = false;
+        elmnt.style.transition = '';
+        document.body.style.userSelect = '';
     }
 
-    function closeDragElement() {
-        document.onmouseup = null;
-        document.onmousemove = null;
+    function drag(e) {
+        if (!active) return;
+        if (e.cancelable) e.preventDefault();
+
+        const clientX = e.type === "touchmove" ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
+
+        const left = clientX - xOffset;
+        const top = clientY - yOffset;
+
+        elmnt.style.left = `${left}px`;
+        elmnt.style.top = `${top}px`;
+        elmnt.style.bottom = 'auto';
+        elmnt.style.right = 'auto';
     }
 }
 
@@ -3049,6 +3067,9 @@ function syncMapToGPS() {
                     if (proceduralData.length > 0) {
                         selectParcelByData(proceduralData[0]);
                     }
+                    
+                    // Immediately focus camera on user's exact coordinates
+                    focusCesiumBuilding();
                     
                     fetchBuildingFootprint(lat, lon, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
@@ -3122,19 +3143,18 @@ function syncMapToGPS() {
     );
 }
 
-function resetToKanteeravaStadium() {
+function resetToDefaultSite() {
     ANCHOR_LAT = 12.96945;
     ANCHOR_LON = 77.5927;
     ANCHOR_HEIGHT = 920.0;
     
-    showToast("🏟️ Resetting map to Sree Kanteerava Stadium...");
+    showToast("🏛️ Resetting map to default site coordinates...");
     
     if (isCesiumInitialized && cesiumViewer) {
         setupCesiumAnchor();
         currentOverpassFootprint = null;
         
-        // Procedurally build Sree Kanteerava Stadium floors first
-        const bName = "Sree Kanteerava Stadium";
+        const bName = "Central GIS Building";
         const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
         allParcelsData = proceduralData;
         renderParcelsInCesium();
@@ -3142,15 +3162,15 @@ function resetToKanteeravaStadium() {
             selectParcelByData(proceduralData[0]);
         }
         
-        // Fetch exact footprint from OpenStreetMap Overpass
         fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
             currentOverpassFootprint = geometry;
             const area = getPolygonArea(geometry);
             
             let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
             let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
+            const actualName = tags['name'] || tags['addr:housename'] || "Central GIS Building";
             
-            const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, bName, realLevels);
+            const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels);
             generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
             allParcelsData = generated;
             renderParcelsInCesium();
@@ -3159,7 +3179,6 @@ function resetToKanteeravaStadium() {
             }
         }, () => {});
         
-        // Fetch geocoded address
         const startupNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}`;
         fetch(startupNominatimUrl)
             .then(res => res.json())
@@ -3171,7 +3190,6 @@ function resetToKanteeravaStadium() {
                 }
             }).catch(() => {});
             
-        // Fly camera smoothly to Sree Kanteerava Stadium
         const targetCartesian = localToGlobal(40, -80, 95);
         smoothCesiumFlyTo({
             destination: targetCartesian,
@@ -3188,7 +3206,7 @@ function resetToKanteeravaStadium() {
 window.toggleCesiumControlsMinimize = toggleCesiumControlsMinimize;
 window.makeElementDraggable = makeElementDraggable;
 window.syncMapToGPS = syncMapToGPS;
-window.resetToKanteeravaStadium = resetToKanteeravaStadium;
+window.resetToDefaultSite = resetToDefaultSite;
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(init, 100);
