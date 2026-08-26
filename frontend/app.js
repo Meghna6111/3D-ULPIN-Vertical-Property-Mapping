@@ -214,8 +214,109 @@ async function init() {
         urlInput.value = localStorage.getItem("custom_backend_url") || "";
     }
     
-    // Geolocation at startup is disabled so map defaults to Sree Kanteerava Stadium. User can sync via GPS button.
-    console.log("Map initialized. Defaulting to Sree Kanteerava Stadium anchor coordinates.");
+    // Dynamic Geolocation Detection to center map on user's exact device location (with terrain altitude correction)
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                ANCHOR_LAT = position.coords.latitude;
+                ANCHOR_LON = position.coords.longitude;
+                
+                console.log(`Device location detected: Lat ${ANCHOR_LAT}, Lon ${ANCHOR_LON}`);
+                
+                const updateLocationAndRender = () => {
+                    setupCesiumAnchor();
+                    currentOverpassFootprint = null;
+                    
+                    // Procedural generation for device location first
+                    const bName = "Device Location Building";
+                    const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
+                    allParcelsData = proceduralData;
+                    renderParcelsInCesium();
+                    if (proceduralData.length > 0) {
+                        selectParcelByData(proceduralData[0]);
+                    }
+                    
+                    // Fetch exact footprint geometry for device location
+                    fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+                        currentOverpassFootprint = geometry;
+                        const area = getPolygonArea(geometry);
+                        
+                        let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
+                        let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
+                        const actualName = tags['name'] || tags['addr:housename'] || "Device Location Building";
+                        
+                        const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels);
+                        generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
+                        allParcelsData = generated;
+                        renderParcelsInCesium();
+                        if (generated.length > 0) {
+                            selectParcelByData(generated[0]);
+                        }
+                    }, () => {});
+
+                    // Fetch address info via reverse geocoding
+                    const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}`;
+                    const directNominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}&format=json&zoom=18`;
+                    
+                    const handleGPSNominatim = (data) => {
+                        let realName = data.name || data.display_name || "Device Location Building";
+                        if (realName.length > 45) realName = realName.substring(0, 45) + "...";
+                        let fullAddress = data.display_name || "Unknown Location";
+                        currentGeocodedAddress = fullAddress;
+                        
+                        allParcelsData.forEach(p => {
+                            p.building_name = realName;
+                            p.geocoded_address = fullAddress;
+                        });
+                        renderParcelsInCesium();
+                        const currentSel = allParcelsData[0];
+                        if (currentSel) selectParcelByData(currentSel);
+                    };
+                    
+                    fetch(proxyNominatimUrl)
+                        .then(res => res.json())
+                        .then(data => handleGPSNominatim(data))
+                        .catch(() => {
+                            fetch(directNominatimUrl, { headers: { 'User-Agent': '3D-ULPIN-Cadastre-GIS' } })
+                                .then(res => res.json())
+                                .then(data => handleGPSNominatim(data))
+                                .catch(() => {});
+                        });
+                };
+ 
+                if (isCesiumInitialized && cesiumViewer) {
+                    const pos = Cesium.Cartographic.fromDegrees(ANCHOR_LON, ANCHOR_LAT);
+                    let height = cesiumViewer.scene.globe.getHeight(pos) || 0.0;
+                    
+                    if (cesiumViewer.terrainProvider) {
+                        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, [pos])
+                            .then((updatedPositions) => {
+                                ANCHOR_HEIGHT = updatedPositions[0].height || height;
+                                updateLocationAndRender();
+                            })
+                            .catch(() => {
+                                ANCHOR_HEIGHT = height;
+                                updateLocationAndRender();
+                            });
+                    } else {
+                        ANCHOR_HEIGHT = height;
+                        updateLocationAndRender();
+                    }
+                } else {
+                    ANCHOR_HEIGHT = 100.0; // Placeholder until Cesium is initialized
+                    setupCesiumAnchor();
+                    const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, "Device Location Building");
+                    allParcelsData = proceduralData;
+                    refreshParcelRendering();
+                }
+                showToast("📍 Map updated to your device's exact location!");
+            },
+            (error) => {
+                console.warn("Geolocation access denied or timed out. Defaulting to Sree Kanteerava Stadium.", error);
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    }
 
 
     const container = document.getElementById("canvas-container");
