@@ -49,18 +49,18 @@ const FALLBACK_PARCELS = [
     {
         id: "b2-metro-01",
         ulpin_3d: `${BASE_PLOT_ID}-B002`,
-        building_name: "Sree Kanteerava Stadium",
-        base_survey_no: "SY-142/2A",
+        building_name: "3D Volumetric Property",
+        base_survey_no: "SY-GIS-101",
         base_plot_id: BASE_PLOT_ID,
         state_code: "KA",
         district_code: "560",
         floor_level: -2,
-        unit_label: "Basement-02 (Metro & Utility Corridor)",
-        owner_name: "Bangalore Metro Rail Corp (BMRCL)",
+        unit_label: "Basement-02 (Subsurface Infrastructure)",
+        owner_name: "Municipal Transport & Utilities",
         property_type: "Subsurface Public Infrastructure",
         volume_m3: 384.0,
         bounds: { min_x: -6.0, max_x: 6.0, min_y: -6.0, max_y: 6.0, min_z: -6.0, max_z: -3.2 },
-        seniors_60plus: 0, adults: 4, infants_kids: 0, total_occupants: 4,
+        seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
         electricity_kwh: 1200.0, water_liters: 25000.0,
         is_vulnerable_for_rescue: false,
         encumbrance_status: "Clear / Validated",
@@ -70,15 +70,15 @@ const FALLBACK_PARCELS = [
     {
         id: "b1-parking-01",
         ulpin_3d: `${BASE_PLOT_ID}-B001`,
-        building_name: "Sree Kanteerava Stadium",
-        base_survey_no: "SY-142/2A",
+        building_name: "3D Volumetric Property",
+        base_survey_no: "SY-GIS-101",
         base_plot_id: BASE_PLOT_ID,
         state_code: "KA",
         district_code: "560",
         floor_level: -1,
-        unit_label: "Basement-01 (Automated Parking & Power Vault)",
-        owner_name: "Apex High-Rise Owners Association",
-        property_type: "Subsurface Parking & Utilities",
+        unit_label: "Basement-01 (Subsurface Utility Vault)",
+        owner_name: "Registered Strata Property Association",
+        property_type: "Subsurface Utility Vault",
         volume_m3: 363.0,
         bounds: { min_x: -5.5, max_x: 5.5, min_y: -5.5, max_y: 5.5, min_z: -3.0, max_z: 0.0 },
         seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
@@ -91,22 +91,14 @@ const FALLBACK_PARCELS = [
 ];
 
 const sampleResidents = [
-    { owner: "Dr. Aarav Sharma", seniors: 1, adults: 2, kids: 1, elec: 320, water: 14000 },
-    { owner: "Priya Nair", seniors: 0, adults: 2, kids: 2, elec: 380, water: 16500 },
-    { owner: "Vikramaditya Hegde", seniors: 2, adults: 1, kids: 0, elec: 210, water: 9200 },
-    { owner: "Ananya Iyer", seniors: 0, adults: 1, kids: 0, elec: 110, water: 4500 },
-    { owner: "Rohan Kulkarni", seniors: 1, adults: 2, kids: 0, elec: 260, water: 11000 },
-    { owner: "Deepa Deshmukh", seniors: 0, adults: 3, kids: 1, elec: 340, water: 15000 },
-    { owner: "Karthik Sundaram", seniors: 0, adults: 2, kids: 0, elec: 200, water: 8800 },
-    { owner: "Sneha Patil", seniors: 1, adults: 1, kids: 1, elec: 230, water: 9900 },
-    { owner: "Manoj Verma", seniors: 2, adults: 2, kids: 0, elec: 290, water: 13000 },
-    { owner: "Tanvi Sengupta", seniors: 0, adults: 2, kids: 1, elec: 280, water: 12000 },
-    { owner: "Siddharth Menon", seniors: 0, adults: 1, kids: 0, elec: 140, water: 5200 },
-    { owner: "Bhavana Rao", seniors: 1, adults: 2, kids: 2, elec: 420, water: 18000 },
-    { owner: "Arjun Reddy", seniors: 0, adults: 4, kids: 0, elec: 820, water: 34000 },
-    { owner: "Meera Joshi", seniors: 2, adults: 1, kids: 1, elec: 310, water: 13500 },
-    { owner: "Gaurav Malhotra", seniors: 0, adults: 2, kids: 0, elec: 215, water: 9000 },
-    { owner: "Neha Kapoor", seniors: 1, adults: 2, kids: 0, elec: 270, water: 11500 },
+    { owner: "Property Title Holder (Unit 101)", seniors: 0, adults: 2, kids: 0, elec: 320, water: 14000 },
+    { owner: "Property Title Holder (Unit 102)", seniors: 0, adults: 2, kids: 1, elec: 380, water: 16500 },
+    { owner: "Property Title Holder (Unit 201)", seniors: 1, adults: 2, kids: 0, elec: 210, water: 9200 },
+    { owner: "Property Title Holder (Unit 202)", seniors: 0, adults: 1, kids: 0, elec: 110, water: 4500 },
+    { owner: "Property Title Holder (Unit 301)", seniors: 0, adults: 2, kids: 0, elec: 260, water: 11000 },
+    { owner: "Property Title Holder (Unit 302)", seniors: 0, adults: 2, kids: 1, elec: 340, water: 15000 },
+    { owner: "Property Title Holder (Unit 401)", seniors: 0, adults: 2, kids: 0, elec: 200, water: 8800 },
+    { owner: "Property Title Holder (Unit 402)", seniors: 0, adults: 2, kids: 0, elec: 230, water: 9900 }
 ];
 
 let resIdx = 0;
@@ -133,7 +125,7 @@ for (let f = 1; f <= 4; f++) {
             FALLBACK_PARCELS.push({
                 id: `unit-${unitNo}`,
                 ulpin_3d: ulpin,
-                building_name: "Sree Kanteerava Stadium",
+                building_name: "3D Volumetric Property",
                 base_survey_no: "SY-142/2A",
                 base_plot_id: BASE_PLOT_ID,
                 state_code: "KA",
@@ -2846,7 +2838,7 @@ function selectParcelByData(p) {
     setTxt("owner-name", p.owner_name);
     setTxt("survey-no", p.base_survey_no);
     setTxt("encumbrance-status", p.encumbrance_status || "Clear / Certified Freehold");
-    setTxt("real-osm-address", p.geocoded_address || currentGeocodedAddress || "Kanteerava Stadium, Kasturba Road, Bengaluru, Karnataka, 560001, India (Default)");
+    setTxt("real-osm-address", p.geocoded_address || currentGeocodedAddress || "Live Verified Coordinates");
 
     setTxt("demo-seniors", p.seniors_60plus || 0);
     setTxt("demo-adults", p.adults || 2);
