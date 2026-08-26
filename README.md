@@ -140,7 +140,27 @@ Open `http://127.0.0.1:8000/` in your browser.
 
 ---
 
-## 7. Deployment Configuration
+## 7. 24/7 Cloud Backend Deployment
+
+The Python backend can be deployed 24/7 on the internet (e.g., using **Render**). 
+
+### One-Click Deploy to Render
+
+You can easily deploy the FastAPI backend using Render's Blueprint service by linking your GitHub repository:
+
+1. Create a free account at [Render](https://render.com).
+2. Click **New** -> **Blueprint**.
+3. Select your repository `Meghna6111/3D-ULPIN-Vertical-Property-Mapping`.
+4. Render will automatically read the `render.yaml` configuration in this repository, provisioning the Python Web Service.
+5. In the Render Dashboard, go to your Web Service settings and add the environment variables:
+   * `MONGODB_URI`: Your MongoDB Atlas cluster connection URI (to store data persistently).
+   * `VITE_CESIUM_ION_TOKEN`: Your Cesium Ion Token.
+6. Once deployed, copy your web service URL (e.g., `https://your-backend.onrender.com`).
+7. Open the Web Application dashboard, paste the URL in the **Production Backend URL** input box inside the left side panel, and click **Save**.
+
+---
+
+## 8. Deployment Configuration
 
 The static WebGL frontend is deployed on **Firebase Hosting** under the project ID `propertymap-system`.
 
@@ -157,6 +177,6 @@ firebase deploy --non-interactive
 
 ---
 
-## 8. Git Branch Strategy
+## 9. Git Branch Strategy
 
 *Development is branch-isolated under `feature/*` branches and reviewed before merging to the `main` branch.*

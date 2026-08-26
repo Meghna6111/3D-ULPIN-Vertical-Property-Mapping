@@ -23,6 +23,7 @@ class DBManager:
         # Load environment configuration
         self._init_mongodb()
         self._init_sqlite()
+        self._migrate_sqlite_to_mongodb()
 
     def _init_mongodb(self):
         """Initializes connection to MongoDB Atlas if URI is present in environment/dotenv."""
@@ -132,6 +133,65 @@ class DBManager:
                         pass
 
             conn.commit()
+
+    def _migrate_sqlite_to_mongodb(self):
+        """If using MongoDB and the MongoDB collection is empty, migrate existing data from SQLite."""
+        if not self.use_mongo or not self.collection:
+            return
+        
+        try:
+            mongo_count = self.collection.count_documents({})
+            if mongo_count == 0:
+                print("MongoDB Atlas is empty. Migrating existing parcels from SQLite database...")
+                # Get all parcels from SQLite
+                parcels_to_migrate = []
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM parcels_3d")
+                    rows = cursor.fetchall()
+                    for r in rows:
+                        # Convert SQLite row to Parcel3DRecord
+                        try:
+                            meta = json.loads(r["metadata_json"]) if r["metadata_json"] else {}
+                        except Exception:
+                            meta = {}
+                        bounds = BoundingBox3DData(
+                            min_x=r["min_x"], max_x=r["max_x"],
+                            min_y=r["min_y"], max_y=r["max_y"],
+                            min_z=r["min_z"], max_z=r["max_z"]
+                        )
+                        record = Parcel3DRecord(
+                            id=r["id"],
+                            ulpin_3d=r["ulpin_3d"],
+                            base_survey_no=r["base_survey_no"],
+                            base_plot_id=r["base_plot_id"],
+                            state_code=r["state_code"],
+                            district_code=r["district_code"],
+                            floor_level=r["floor_level"],
+                            unit_label=r["unit_label"],
+                            owner_name=r["owner_name"],
+                            property_type=r["property_type"],
+                            volume_m3=r["volume_m3"],
+                            bounds=bounds,
+                            seniors_60plus=r["seniors_60plus"],
+                            adults=r["adults"],
+                            infants_kids=r["infants_kids"],
+                            total_occupants=r["total_occupants"],
+                            electricity_kwh=r["electricity_kwh"],
+                            water_liters=r["water_liters"],
+                            declared_floors=r["declared_floors"],
+                            actual_floors=r["actual_floors"],
+                            metadata_json=meta,
+                            encumbrance_status=r["encumbrance_status"],
+                            created_at=r["created_at"]
+                        )
+                        parcels_to_migrate.append(self._parcel_to_doc(record))
+                
+                if parcels_to_migrate:
+                    self.collection.insert_many(parcels_to_migrate)
+                    print(f"Successfully migrated {len(parcels_to_migrate)} parcels from SQLite to MongoDB Atlas!")
+        except Exception as e:
+            print(f"Error during SQLite to MongoDB migration: {e}")
 
     def _parcel_to_doc(self, parcel: Parcel3DRecord) -> dict:
         doc = parcel.to_dict()

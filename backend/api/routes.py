@@ -627,7 +627,7 @@ def seed_complex():
         bounds=b2_bounds,
         seniors_60plus=0, adults=4, infants_kids=0, total_occupants=4,
         electricity_kwh=1200.0, water_liters=25000.0,
-        metadata_json={"depth_class": "Deep Underground", "easement_type": "Subsurface Transport"},
+        metadata_json={"depth_class": "Deep Underground", "easement_type": "Subsurface Transport", "building_name": "Sree Kanteerava Stadium"},
         encumbrance_status="Clear / Validated"
     ))
 
@@ -648,7 +648,7 @@ def seed_complex():
         bounds=b1_bounds,
         seniors_60plus=0, adults=2, infants_kids=0, total_occupants=2,
         electricity_kwh=650.0, water_liters=8000.0,
-        metadata_json={"depth_class": "Shallow Underground", "easement_type": "Common Amenity"},
+        metadata_json={"depth_class": "Shallow Underground", "easement_type": "Common Amenity", "building_name": "Sree Kanteerava Stadium"},
         encumbrance_status="Clear / Validated"
     ))
 
@@ -706,7 +706,7 @@ def seed_complex():
                     water_liters=res["water"],
                     declared_floors=4,
                     actual_floors=4,
-                    metadata_json={"carpet_area_sqm": round(unit_w * unit_w, 1), "share_ratio": 0.0625},
+                    metadata_json={"carpet_area_sqm": round(unit_w * unit_w, 1), "share_ratio": 0.0625, "building_name": "Sree Kanteerava Stadium"},
                     encumbrance_status="Clear / Validated"
                 ))
                 owner_idx += 1
@@ -794,4 +794,36 @@ def get_config():
         "VITE_API_BASE_URL": api_url,
         "firebase": fb_config
     }
+
+# -----------------------------------------------------------------------------
+# 12. CORS Bypass Proxy Endpoints
+# -----------------------------------------------------------------------------
+
+@router.get("/proxy/overpass")
+def proxy_overpass(lat: float, lon: float):
+    """Proxy Overpass API requests to bypass CORS restrictions in hosted environments."""
+    import requests
+    url = f"https://overpass-api.de/api/interpreter?data=[out:json];way(around:50,{lat},{lon})[building];out geom;"
+    try:
+        response = requests.get(url, timeout=10, headers={"User-Agent": "3D-ULPIN-Cadastre-GIS/1.0"})
+        if response.ok:
+            return response.json()
+        return {"elements": []}
+    except Exception as e:
+        print(f"Overpass Proxy error: {e}")
+        return {"elements": []}
+
+@router.get("/proxy/nominatim")
+def proxy_nominatim(lat: float, lon: float):
+    """Proxy Nominatim API requests to bypass CORS restrictions in hosted environments."""
+    import requests
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=18"
+    try:
+        response = requests.get(url, timeout=10, headers={"User-Agent": "3D-ULPIN-Cadastre-GIS/1.0"})
+        if response.ok:
+            return response.json()
+        return {}
+    except Exception as e:
+        print(f"Nominatim Proxy error: {e}")
+        return {}
 

@@ -4,7 +4,8 @@
  * NDRF Disaster Rescue Mode, Density Heatmap, AI Pipelines, and QR Title Certificate Generator
  */
 
-let API_BASE = window.location.protocol.startsWith("http") ? "/api" : "http://127.0.0.1:8000/api";
+const savedBackend = localStorage.getItem("custom_backend_url");
+let API_BASE = savedBackend ? `${savedBackend}/api` : (window.location.protocol.startsWith("http") ? "/api" : "http://127.0.0.1:8000/api");
 
 let scene, camera, renderer, controls, raycaster, mouse;
 const parcelMeshes = [];
@@ -22,14 +23,15 @@ let cesiumMouseHandler = null;
 let cesiumHoveredEntity = null;
 let selectedOsmFeature = null;
 let cesiumRotationAngle = 0;
-let cesiumFootprintShape = "rectangle";
+let cesiumFootprintShape = "oval";
 let currentOverpassFootprint = null;
 
-let ANCHOR_LAT = 12.9716;
-let ANCHOR_LON = 77.5946;
+let ANCHOR_LAT = 12.96945;
+let ANCHOR_LON = 77.5927;
 let ANCHOR_HEIGHT = 920.0; // Bangalore altitude in meters
 let cesiumModelMatrix = null;
 let cesiumAnchorCartesian = null;
+let currentGeocodedAddress = "";
 
 let selectedMesh = null;
 let hoveredMesh = null;
@@ -47,6 +49,7 @@ const FALLBACK_PARCELS = [
     {
         id: "b2-metro-01",
         ulpin_3d: `${BASE_PLOT_ID}-B002`,
+        building_name: "Sree Kanteerava Stadium",
         base_survey_no: "SY-142/2A",
         base_plot_id: BASE_PLOT_ID,
         state_code: "KA",
@@ -67,6 +70,7 @@ const FALLBACK_PARCELS = [
     {
         id: "b1-parking-01",
         ulpin_3d: `${BASE_PLOT_ID}-B001`,
+        building_name: "Sree Kanteerava Stadium",
         base_survey_no: "SY-142/2A",
         base_plot_id: BASE_PLOT_ID,
         state_code: "KA",
@@ -129,6 +133,7 @@ for (let f = 1; f <= 4; f++) {
             FALLBACK_PARCELS.push({
                 id: `unit-${unitNo}`,
                 ulpin_3d: ulpin,
+                building_name: "Sree Kanteerava Stadium",
                 base_survey_no: "SY-142/2A",
                 base_plot_id: BASE_PLOT_ID,
                 state_code: "KA",
@@ -160,6 +165,21 @@ for (let f = 1; f <= 4; f++) {
 // -----------------------------------------------------------------------------
 
 async function loadConfig() {
+    const fallbackToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjdyUG1VUjdPQXZjbmtHQlYiLCJqdGkiOiJlZjMyYTZmMi00OWZkLTQyNTctYmIzOC05NDRiNzQ5YjJjY2QiLCJpZCI6NDcyNjEyLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3ODc3MzcxMTl9.uPJ4DnQzuEVLyPy4QjuiBHWb5AwMAvC8d8q9cK9QM7I";
+    const savedBackend = localStorage.getItem("custom_backend_url");
+    if (savedBackend) {
+        API_BASE = `${savedBackend}/api`;
+        try {
+            const response = await fetch(`${savedBackend}/api/config`);
+            if (response.ok) {
+                const data = await response.json();
+                cesiumIonToken = data.VITE_CESIUM_ION_TOKEN || fallbackToken;
+                console.log(`Successfully connected to saved custom backend at: ${API_BASE}`);
+                return;
+            }
+        } catch(e) {}
+    }
+
     const hosts = [];
     if (window.location.origin !== "http://127.0.0.1:8000" && window.location.origin !== "http://localhost:8000") {
         hosts.push(window.location.origin);
@@ -173,7 +193,7 @@ async function loadConfig() {
             const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
-                cesiumIonToken = data.VITE_CESIUM_ION_TOKEN;
+                cesiumIonToken = data.VITE_CESIUM_ION_TOKEN || fallbackToken;
                 API_BASE = host.endsWith('/') ? `${host}api` : `${host}/api`;
                 console.log(`Successfully connected to API backend at: ${API_BASE}`);
                 return;
@@ -183,35 +203,72 @@ async function loadConfig() {
         }
     }
     console.warn("Failed to connect to any backend API. Operating in offline standalone mode.");
+    cesiumIonToken = fallbackToken;
 }
 
 async function init() {
     await loadConfig();
+
+    const urlInput = document.getElementById("input-backend-url");
+    if (urlInput) {
+        urlInput.value = localStorage.getItem("custom_backend_url") || "";
+    }
     
-    // Dynamic Geolocation Detection to center map on user's exact device location
+    // Dynamic Geolocation Detection to center map on user's exact device location (with terrain altitude correction)
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 ANCHOR_LAT = position.coords.latitude;
                 ANCHOR_LON = position.coords.longitude;
-                // For geolocation at sea level, adjust height
-                ANCHOR_HEIGHT = position.coords.altitude || 100.0; 
                 
                 console.log(`Device location detected: Lat ${ANCHOR_LAT}, Lon ${ANCHOR_LON}`);
                 
-                if (isCesiumInitialized && cesiumViewer) {
+                const updateLocationAndRender = () => {
                     setupCesiumAnchor();
                     renderParcelsInCesium();
                     focusCesiumBuilding();
+                    
+                    // Fetch exact footprint geometry for device location
+                    fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+                        currentOverpassFootprint = geometry;
+                        const area = getPolygonArea(geometry);
+                        allParcelsData.forEach(p => {
+                            p.volume_m3 = Math.round(area * 3.2);
+                        });
+                        renderParcelsInCesium();
+                    }, () => {});
+                };
+
+                if (isCesiumInitialized && cesiumViewer) {
+                    const pos = Cesium.Cartographic.fromDegrees(ANCHOR_LON, ANCHOR_LAT);
+                    let height = cesiumViewer.scene.globe.getHeight(pos) || 0.0;
+                    
+                    if (cesiumViewer.terrainProvider) {
+                        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, [pos])
+                            .then((updatedPositions) => {
+                                ANCHOR_HEIGHT = updatedPositions[0].height || height;
+                                updateLocationAndRender();
+                            })
+                            .catch(() => {
+                                ANCHOR_HEIGHT = height;
+                                updateLocationAndRender();
+                            });
+                    } else {
+                        ANCHOR_HEIGHT = height;
+                        updateLocationAndRender();
+                    }
+                } else {
+                    ANCHOR_HEIGHT = 100.0; // Placeholder until Cesium is initialized
                 }
                 showToast("📍 Map updated to your device's exact location!");
             },
             (error) => {
-                console.warn("Geolocation access denied. Defaulting to Bangalore center.", error);
+                console.warn("Geolocation access denied or timed out. Defaulting to Sree Kanteerava Stadium.", error);
             },
             { enableHighAccuracy: true, timeout: 5000 }
         );
     }
+
 
     const container = document.getElementById("canvas-container");
     if (!container) return;
@@ -277,6 +334,13 @@ async function init() {
     fetchParcels();
     fetchMetrics();
     animate();
+
+    // 9. Draggable GIS Controls initialization
+    const controlsPanel = document.getElementById("cesium-controls-panel");
+    const controlsHeader = document.getElementById("cesium-controls-header");
+    if (controlsPanel && controlsHeader) {
+        makeElementDraggable(controlsPanel, controlsHeader);
+    }
 }
 
 function createCadastralGrid() {
@@ -1376,9 +1440,18 @@ async function initCesium() {
         } catch (e) {
             console.error("Terrain creation error:", e);
         }
+        try {
+            viewerOptions.imageryProvider = Cesium.createWorldImagery ? Cesium.createWorldImagery({
+                style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
+            }) : undefined;
+        } catch (e) {
+            console.error("World imagery creation error:", e);
+        }
     } else {
         viewerOptions.imageryProvider = new Cesium.UrlTemplateImageryProvider({
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+            url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            subdomains: ['a', 'b', 'c', 'd'],
+            credit: '© OpenStreetMap contributors, © CARTO'
         });
     }
 
@@ -1394,9 +1467,41 @@ async function initCesium() {
 
         isCesiumInitialized = true;
         
-        setupCesiumAnchor();
-        renderParcelsInCesium();
+        if (ANCHOR_LAT !== 12.96945 || ANCHOR_LON !== 77.5927) {
+            const pos = Cesium.Cartographic.fromDegrees(ANCHOR_LON, ANCHOR_LAT);
+            let height = cesiumViewer.scene.globe.getHeight(pos) || 0.0;
+            if (cesiumViewer.terrainProvider) {
+                Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, [pos])
+                    .then((updatedPositions) => {
+                        ANCHOR_HEIGHT = updatedPositions[0].height || height;
+                        setupCesiumAnchor();
+                        renderParcelsInCesium();
+                    })
+                    .catch(() => {
+                        ANCHOR_HEIGHT = height;
+                        setupCesiumAnchor();
+                        renderParcelsInCesium();
+                    });
+            } else {
+                ANCHOR_HEIGHT = height;
+                setupCesiumAnchor();
+                renderParcelsInCesium();
+            }
+        } else {
+            setupCesiumAnchor();
+            renderParcelsInCesium();
+        }
         setupCesiumInteraction();
+
+        // Fetch exact footprint geometry for default anchor location (Sree Kanteerava Stadium)
+        fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+            currentOverpassFootprint = geometry;
+            const area = getPolygonArea(geometry);
+            allParcelsData.forEach(p => {
+                p.volume_m3 = Math.round(area * 3.2);
+            });
+            renderParcelsInCesium();
+        }, () => {});
         
         // Start in local neighborhood view (750 meters) to load local tiles instantly
         const targetCartesian = localToGlobal(40, -80, 95); // Comfortable overview offset
@@ -1415,14 +1520,14 @@ async function initCesium() {
             if (queueLength === 0 && !hasFlown) {
                 hasFlown = true;
                 removeListener();
-                cesiumViewer.camera.flyTo({
+                smoothCesiumFlyTo({
                     destination: targetCartesian,
                     orientation: {
                         heading: Cesium.Math.toRadians(330),
                         pitch: Cesium.Math.toRadians(-35),
                         roll: 0.0
                     },
-                    duration: 3.8
+                    duration: 2.8
                 });
             }
         });
@@ -1432,20 +1537,20 @@ async function initCesium() {
             if (!hasFlown) {
                 hasFlown = true;
                 try { removeListener(); } catch(e){}
-                cesiumViewer.camera.flyTo({
+                smoothCesiumFlyTo({
                     destination: targetCartesian,
                     orientation: {
                         heading: Cesium.Math.toRadians(330),
                         pitch: Cesium.Math.toRadians(-35),
                         roll: 0.0
                     },
-                    duration: 3.8
+                    duration: 2.8
                 });
             }
         }, 3500);
 
         // Tweak rendering quality threshold to speed up global terrain/tile loading
-        cesiumViewer.scene.globe.maximumScreenSpaceError = 3.0;
+        cesiumViewer.scene.globe.maximumScreenSpaceError = 12.0;
 
         if (cesiumIonToken) {
             try {
@@ -1460,6 +1565,18 @@ async function initCesium() {
             }
         }
 
+        // Geocode default Kanteerava Stadium coordinates at startup
+        const startupNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${ANCHOR_LAT}&lon=${ANCHOR_LON}`;
+        fetch(startupNominatimUrl)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    currentGeocodedAddress = data.display_name;
+                    const addrEl = document.getElementById("real-osm-address");
+                    if (addrEl) addrEl.innerText = data.display_name;
+                }
+            }).catch(() => {});
+
     } catch (e) {
         console.error("Cesium initialization error: ", e);
         showToast("Error initializing Cesium GIS Globe.");
@@ -1469,6 +1586,27 @@ async function initCesium() {
 function setupCesiumAnchor() {
     cesiumAnchorCartesian = Cesium.Cartesian3.fromDegrees(ANCHOR_LON, ANCHOR_LAT, ANCHOR_HEIGHT);
     cesiumModelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(cesiumAnchorCartesian);
+}
+
+function smoothCesiumFlyTo(options) {
+    if (!cesiumViewer) return;
+    const originalSSE = cesiumViewer.scene.globe.maximumScreenSpaceError;
+    cesiumViewer.scene.globe.maximumScreenSpaceError = 24.0;
+    
+    const flyOptions = {
+        ...options,
+        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+        complete: () => {
+            cesiumViewer.scene.globe.maximumScreenSpaceError = originalSSE;
+            if (options.complete) options.complete();
+        },
+        cancel: () => {
+            cesiumViewer.scene.globe.maximumScreenSpaceError = originalSSE;
+            if (options.cancel) options.cancel();
+        }
+    };
+    
+    cesiumViewer.camera.flyTo(flyOptions);
 }
 
 function localToGlobal(x, y, z) {
@@ -1499,7 +1637,7 @@ function getCesiumStatusColor(p) {
     } else if (enc.includes("disputed") || enc.includes("warning") || enc.includes("lock")) {
         return Cesium.Color.YELLOW.withAlpha(0.85);
     } else if (p.floor_level < 0) {
-        return Cesium.Color.PURPLE.withAlpha(0.8);
+        return Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.85); // Bright Cyan
     } else {
         return Cesium.Color.GREEN.withAlpha(0.85);
     }
@@ -1558,7 +1696,166 @@ function renderParcelsInCesium() {
     renderCesiumBaseParcel();
 
     const parcelsToRender = allParcelsData;
-    
+    if (parcelsToRender.length === 0) return;
+
+    // 1. Calculate overall building bounds and hierarchy for the cage
+    let minZTotal = Infinity;
+    let maxZTotal = -Infinity;
+    let buildingName = "Interactive 3D Building";
+    let firstParcel = null;
+
+    parcelsToRender.forEach(p => {
+        if (!firstParcel) firstParcel = p;
+        const b = p.bounds;
+        let floorOffset = 0;
+        if (cesiumExplodedValue > 0) {
+            const floor = p.floor_level;
+            floorOffset = floor * cesiumExplodedValue * 4.0;
+        }
+        const minZ = b.min_z + floorOffset;
+        const maxZ = b.max_z + floorOffset;
+
+        if (minZ < minZTotal) minZTotal = minZ;
+        if (maxZ > maxZTotal) maxZTotal = maxZ;
+        if (p.building_name) buildingName = p.building_name;
+    });
+
+    let cageHierarchy = null;
+    let centerPosition = null;
+
+    if (firstParcel) {
+        const b = firstParcel.bounds;
+        const w = b.max_x - b.min_x;
+        const d = b.max_y - b.min_y;
+        
+        let localCoords = [];
+        if (cesiumFootprintShape === 'oval') {
+            for (let i = 0; i < 16; i++) {
+                const angle = (i / 16) * Math.PI * 2;
+                localCoords.push([Math.cos(angle) * (w/2), Math.sin(angle) * (d/2)]);
+            }
+        } else if (cesiumFootprintShape === 'lshape') {
+            localCoords = [
+                [-w/2, -d/2],
+                [w/2, -d/2],
+                [w/2, 0],
+                [0, 0],
+                [0, d/2],
+                [-w/2, d/2]
+            ];
+        } else if (cesiumFootprintShape === 'tshape') {
+            localCoords = [
+                [-w/2, -d/2],
+                [w/2, -d/2],
+                [w/2, -d/6],
+                [w/6, -d/6],
+                [w/6, d/2],
+                [-w/6, d/2],
+                [-w/6, -d/6],
+                [-w/2, -d/6]
+            ];
+        } else if (cesiumFootprintShape === 'ushape') {
+            localCoords = [
+                [-w/2, -d/2],
+                [w/2, -d/2],
+                [w/2, d/2],
+                [w/3, d/2],
+                [w/3, -d/6],
+                [-w/3, -d/6],
+                [-w/3, d/2],
+                [-w/2, d/2]
+            ];
+        } else {
+            localCoords = [
+                [-w/2, -d/2],
+                [w/2, -d/2],
+                [w/2, d/2],
+                [-w/2, d/2]
+            ];
+        }
+
+        if (currentOverpassFootprint) {
+            const lats = currentOverpassFootprint.map(c => c.lat);
+            const lons = currentOverpassFootprint.map(c => c.lon);
+            const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+            const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+
+            const scaledFootprint = currentOverpassFootprint.map(pt => {
+                const latDiff = pt.lat - avgLat;
+                const lonDiff = pt.lon - avgLon;
+                return {
+                    lat: avgLat + latDiff * 1.02,
+                    lon: avgLon + lonDiff * 1.02
+                };
+            });
+
+            if (cesiumRotationAngle !== 0) {
+                const angleRad = Cesium.Math.toRadians(cesiumRotationAngle);
+                const cosA = Math.cos(angleRad);
+                const sinA = Math.sin(angleRad);
+                
+                const latMid = avgLat * Math.PI / 180;
+                const mPerDegLat = 111132.954;
+                const mPerDegLon = 111412.84 * Math.cos(latMid);
+                
+                const rotatedPositions = scaledFootprint.map(pt => {
+                    const dLat = pt.lat - avgLat;
+                    const dLon = pt.lon - avgLon;
+                    const dx = dLon * mPerDegLon;
+                    const dy = dLat * mPerDegLat;
+                    const rx = dx * cosA - dy * sinA;
+                    const ry = dx * sinA + dy * cosA;
+                    const rLon = avgLon + rx / mPerDegLon;
+                    const rLat = avgLat + ry / mPerDegLat;
+                    return Cesium.Cartesian3.fromDegrees(rLon, rLat);
+                });
+                cageHierarchy = new Cesium.PolygonHierarchy(rotatedPositions);
+            } else {
+                const globalPositions = scaledFootprint.map(pt => Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat));
+                cageHierarchy = new Cesium.PolygonHierarchy(globalPositions);
+            }
+            centerPosition = Cesium.Cartesian3.fromDegrees(avgLon, avgLat, ANCHOR_HEIGHT + maxZTotal + 5.0);
+        } else {
+            const scaledLocalCoords = localCoords.map(coord => [coord[0] * 1.02, coord[1] * 1.02]);
+            cageHierarchy = getGlobalPolygonHierarchy(scaledLocalCoords);
+            centerPosition = localToGlobal(0, 0, maxZTotal + 5.0);
+        }
+
+        // Render the outer transparent cage/bounding box!
+        const cageEntity = cesiumViewer.entities.add({
+            id: 'building-outer-cage',
+            polygon: {
+                hierarchy: cageHierarchy,
+                height: ANCHOR_HEIGHT + minZTotal,
+                extrudedHeight: ANCHOR_HEIGHT + maxZTotal,
+                material: Cesium.Color.WHITE.withAlpha(0.08),
+                outline: true,
+                outlineColor: Cesium.Color.WHITE.withAlpha(0.65),
+                outlineWidth: 2.0
+            }
+        });
+        cesiumEntities.push(cageEntity);
+
+        // Center label for the whole building inside the cage
+        const centerLabelEntity = cesiumViewer.entities.add({
+            id: 'building-center-label',
+            position: centerPosition,
+            label: {
+                text: buildingName,
+                font: 'bold 12px Inter, sans-serif',
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 4.0,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+        });
+        cesiumEntities.push(centerLabelEntity);
+    }
+
+    // 2. Render individual floors
     parcelsToRender.forEach(p => {
         if (currentFloorFilter !== null && p.floor_level !== currentFloorFilter) {
             return;
@@ -1606,7 +1903,6 @@ function renderParcelsInCesium() {
                 [-w/2, d/2]
             ];
         } else {
-            // default rectangle
             localCoords = [
                 [-w/2, -d/2],
                 [w/2, -d/2],
@@ -1628,13 +1924,8 @@ function renderParcelsInCesium() {
         const isSelected = cesiumSelectedEntity && cesiumSelectedEntity.id === p.ulpin_3d;
         const finalColor = isSelected ? Cesium.Color.CYAN.withAlpha(0.85) : color;
 
-        // Calculate centroid position for label placement
-        let cz = (minZ + maxZ) / 2;
-        let position;
-
         let hierarchy;
         if (currentOverpassFootprint) {
-            // Apply rotation angle if set
             if (cesiumRotationAngle !== 0) {
                 const lats = currentOverpassFootprint.map(c => c.lat);
                 const lons = currentOverpassFootprint.map(c => c.lon);
@@ -1652,16 +1943,12 @@ function renderParcelsInCesium() {
                 const rotatedPositions = currentOverpassFootprint.map(pt => {
                     const dLat = pt.lat - avgLat;
                     const dLon = pt.lon - avgLon;
-                    
                     const dx = dLon * mPerDegLon;
                     const dy = dLat * mPerDegLat;
-                    
                     const rx = dx * cosA - dy * sinA;
                     const ry = dx * sinA + dy * cosA;
-                    
                     const rLon = avgLon + rx / mPerDegLon;
                     const rLat = avgLat + ry / mPerDegLat;
-                    
                     return Cesium.Cartesian3.fromDegrees(rLon, rLat);
                 });
                 hierarchy = new Cesium.PolygonHierarchy(rotatedPositions);
@@ -1669,20 +1956,9 @@ function renderParcelsInCesium() {
                 const globalPositions = currentOverpassFootprint.map(pt => Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat));
                 hierarchy = new Cesium.PolygonHierarchy(globalPositions);
             }
-
-            // Compute geographic centroid for label placement
-            const lats = currentOverpassFootprint.map(c => c.lat);
-            const lons = currentOverpassFootprint.map(c => c.lon);
-            const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-            const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
-            position = Cesium.Cartesian3.fromDegrees(avgLon, avgLat, ANCHOR_HEIGHT + cz);
         } else {
             hierarchy = getGlobalPolygonHierarchy(localCoords);
-            position = localToGlobal(0, 0, cz);
         }
-
-        // Find if this is the top floor among all rendered parcels
-        const isTopFloor = p.floor_level === Math.max(...parcelsToRender.map(x => x.floor_level));
 
         // Create extruded polygon representing the exact 3D floor shape
         const entity = cesiumViewer.entities.add({
@@ -1693,33 +1969,13 @@ function renderParcelsInCesium() {
                 extrudedHeight: ANCHOR_HEIGHT + maxZ,
                 material: finalColor,
                 outline: true,
-                outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.BLACK.withAlpha(0.5),
+                outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.WHITE.withAlpha(0.65),
                 outlineWidth: isSelected ? 3.0 : 1.0
             },
             properties: p
         });
 
         cesiumEntities.push(entity);
-
-        // If it is the top floor, create a separate floating 3D label entity
-        if (isTopFloor) {
-            const labelEntity = cesiumViewer.entities.add({
-                id: p.ulpin_3d + '-label',
-                position: position,
-                label: {
-                    text: p.building_name || "Interactive Building",
-                    font: 'bold 11px Inter, sans-serif',
-                    fillColor: Cesium.Color.WHITE,
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 3.0,
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                    pixelOffset: new Cesium.Cartesian2(0, -25),
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY
-                }
-            });
-            cesiumEntities.push(labelEntity);
-        }
     });
 }
 
@@ -1769,23 +2025,82 @@ function getEstimatedShape(name) {
 }
 
 function fetchBuildingFootprint(lat, lon, successCallback, fallbackCallback) {
-    const url = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:15,${lat},${lon})[building];out geom;`;
+    const proxyUrl = `${API_BASE}/proxy/overpass?lat=${lat}&lon=${lon}`;
+    const directUrl = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:50,${lat},${lon})[building];out geom;`;
     
-    fetch(url)
-        .then(res => res.json())
+    fetch(proxyUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("Proxy failed");
+            return res.json();
+        })
         .then(data => {
             if (data && data.elements && data.elements.length > 0) {
-                const element = data.elements[0];
-                if (element.geometry && element.geometry.length > 2) {
-                    successCallback(element.geometry, element.tags || {});
+                let closestElement = null;
+                let minDistance = Infinity;
+                
+                data.elements.forEach(el => {
+                    if (el.geometry && el.geometry.length > 2) {
+                        let sumLat = 0, sumLon = 0;
+                        el.geometry.forEach(pt => {
+                            sumLat += pt.lat;
+                            sumLon += pt.lon;
+                        });
+                        const centLat = sumLat / el.geometry.length;
+                        const centLon = sumLon / el.geometry.length;
+                        
+                        const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            closestElement = el;
+                        }
+                    }
+                });
+                
+                if (closestElement) {
+                    successCallback(closestElement.geometry, closestElement.tags || {});
                     return;
                 }
             }
-            fallbackCallback();
+            throw new Error("No building found via proxy");
         })
         .catch(err => {
-            console.warn("Overpass API failed, falling back:", err);
-            fallbackCallback();
+            console.warn("Proxy Overpass failed, trying direct OpenStreetMap fetch:", err);
+            fetch(directUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.elements && data.elements.length > 0) {
+                        let closestElement = null;
+                        let minDistance = Infinity;
+                        
+                        data.elements.forEach(el => {
+                            if (el.geometry && el.geometry.length > 2) {
+                                let sumLat = 0, sumLon = 0;
+                                el.geometry.forEach(pt => {
+                                    sumLat += pt.lat;
+                                    sumLon += pt.lon;
+                                });
+                                const centLat = sumLat / el.geometry.length;
+                                const centLon = sumLon / el.geometry.length;
+                                
+                                const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    closestElement = el;
+                                }
+                            }
+                        });
+                        
+                        if (closestElement) {
+                            successCallback(closestElement.geometry, closestElement.tags || {});
+                            return;
+                        }
+                    }
+                    fallbackCallback();
+                })
+                .catch(directErr => {
+                    console.warn("Direct Overpass API failed:", directErr);
+                    fallbackCallback();
+                });
         });
 }
 
@@ -1920,6 +2235,24 @@ function setupCesiumInteraction() {
                         currentOverpassFootprint = geometry;
                         const area = getPolygonArea(geometry);
                         
+                        // Dynamically update building levels and height from real-world OSM tags
+                        let realLevels = parseInt(tags['building:levels'] || tags['levels']);
+                        let realHeight = parseFloat(tags['height'] || tags['building:height']);
+                        
+                        if (!realLevels || isNaN(realLevels)) {
+                            if (realHeight && !isNaN(realHeight)) {
+                                realLevels = Math.max(1, Math.round(realHeight / 3.2));
+                            } else {
+                                realLevels = Math.max(1, Math.round(bHeight / 3.2)) || 5;
+                            }
+                        }
+                        
+                        if (!realHeight || isNaN(realHeight)) {
+                            realHeight = realLevels * 3.2;
+                        }
+                        
+                        allParcelsData = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels);
+                        
                         // Update volume based on the exact footprint shape
                         allParcelsData.forEach(p => {
                             p.volume_m3 = Math.round(area * 3.2);
@@ -1929,7 +2262,7 @@ function setupCesiumInteraction() {
                         renderParcelsInCesium();
                         
                         // Update inspector
-                        const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id);
+                        const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id) || allParcelsData[0];
                         if (currentSel) {
                             selectParcelByData(currentSel);
                         }
@@ -1937,40 +2270,58 @@ function setupCesiumInteraction() {
                         // Fallback: do nothing, procedural fallback is already rendered
                     });
 
-                    // 2. Async fetch real place name/address from Nominatim reverse geocoding API
-                    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18`, {
-                        headers: {
-                            'User-Agent': '3D-ULPIN-Cadastre-GIS'
-                        }
-                    })
-                    .then(res => res.json())
-                    .then(data => {
+                    const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${lat}&lon=${lon}`;
+                    const directNominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18`;
+                    
+                    const handleNominatimData = (data) => {
                         let realName = "";
+                        let fullAddress = "Unknown Location";
                         if (data && data.address) {
                             realName = data.name || data.address.amenity || data.address.building || data.address.shop || data.address.office || data.address.tourism || data.address.road || "Interactive Building";
+                            fullAddress = data.display_name || fullAddress;
                         } else if (data) {
                             realName = data.display_name || "Interactive Building";
+                            fullAddress = data.display_name || fullAddress;
                         }
                         
                         if (realName && realName.length > 45) {
                             realName = realName.substring(0, 45) + "...";
                         }
                         
+                        currentGeocodedAddress = fullAddress;
+                        
                         if (realName) {
                             allParcelsData.forEach(p => {
                                 p.building_name = realName;
                                 p.unit_label = p.unit_label.replace(bName, realName);
+                                p.geocoded_address = fullAddress;
                             });
                             
-                            // Re-render and update inspector with geocoded data
                             renderParcelsInCesium();
-                            const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id);
+                            const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id) || allParcelsData[0];
                             if (currentSel) {
                                 selectParcelByData(currentSel);
                             }
                         }
-                    })
-                    .catch(err => console.warn("Nominatim reverse lookup failed:", err));
+                    };
+
+                    fetch(proxyNominatimUrl)
+                        .then(res => {
+                            if (!res.ok) throw new Error("Nominatim proxy failed");
+                            return res.json();
+                        })
+                        .then(data => handleNominatimData(data))
+                        .catch(err => {
+                            console.warn("Proxy Nominatim failed, trying direct query:", err);
+                            fetch(directNominatimUrl, {
+                                headers: {
+                                    'User-Agent': '3D-ULPIN-Cadastre-GIS'
+                                }
+                            })
+                            .then(res => res.json())
+                            .then(data => handleNominatimData(data))
+                            .catch(directErr => console.warn("Direct Nominatim failed:", directErr));
+                        });
                 }
             }
         }
@@ -2004,8 +2355,8 @@ function getEstimatedDimensions(name, height) {
     return { width: 16.0, depth: 16.0 };
 }
 
-function generate3DBuildingFloors(lat, lon, heightMeters, name) {
-    const numFloors = Math.max(1, Math.round(heightMeters / 3.2));
+function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors = null) {
+    const numFloors = explicitFloors !== null ? explicitFloors : Math.max(1, Math.round(heightMeters / 3.2));
     const generatedParcels = [];
     
     const dims = getEstimatedDimensions(name, heightMeters);
@@ -2141,7 +2492,7 @@ function focusCesiumBuilding() {
     if (!cesiumViewer || !isCesiumInitialized) return;
 
     cesiumViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY); // Clear look-at lock to prevent off-center zoom out
-    cesiumViewer.camera.flyTo({
+    smoothCesiumFlyTo({
         destination: localToGlobal(40, -80, 95), // Comfortable overview offset
         orientation: {
             heading: Cesium.Math.toRadians(330),
@@ -2158,7 +2509,7 @@ function setCesiumCameraAngle(angleType) {
     cesiumViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY); // Clear lock
 
     if (angleType === 'top') {
-        cesiumViewer.camera.flyTo({
+        smoothCesiumFlyTo({
             destination: localToGlobal(0, 0, 80),
             orientation: {
                 heading: Cesium.Math.toRadians(0),
@@ -2168,7 +2519,7 @@ function setCesiumCameraAngle(angleType) {
             duration: 1.0
         });
     } else if (angleType === '3d') {
-        cesiumViewer.camera.flyTo({
+        smoothCesiumFlyTo({
             destination: localToGlobal(20, -25, 30),
             orientation: {
                 heading: Cesium.Math.toRadians(315),
@@ -2234,12 +2585,8 @@ async function switchMapEngine(engine) {
 
         if (!isCesiumInitialized) {
             await initCesium();
-            allParcelsData = []; // Clear demo building initially on load
-            renderParcelsInCesium();
-        } else {
-            allParcelsData = []; // Clear demo building when toggled
-            renderParcelsInCesium();
         }
+        renderParcelsInCesium();
     }
     showToast(`Switched map engine to ${engine === 'three' ? 'Local 3D View' : 'Cesium 3D GIS Globe'}`);
 }
@@ -2283,15 +2630,15 @@ function selectParcelByData(p) {
                     entity.polygon.outlineWidth = 3.0;
                 }
                 
-                // Fly to a comfortable 3D overview of the building with a smooth cinematic slide (3.2 seconds)
-                cesiumViewer.camera.flyTo({
+                // Fly to a comfortable 3D overview of the building with a smooth cinematic slide (2.2 seconds)
+                smoothCesiumFlyTo({
                     destination: localToGlobal(40, -80, 95),
                     orientation: {
                         heading: Cesium.Math.toRadians(330),
                         pitch: Cesium.Math.toRadians(-35),
                         roll: 0.0
                     },
-                    duration: 3.2
+                    duration: 2.2
                 });
             }
         }
@@ -2315,6 +2662,7 @@ function selectParcelByData(p) {
     setTxt("owner-name", p.owner_name);
     setTxt("survey-no", p.base_survey_no);
     setTxt("encumbrance-status", p.encumbrance_status || "Clear / Certified Freehold");
+    setTxt("real-osm-address", p.geocoded_address || currentGeocodedAddress || "Kanteerava Stadium, Kasturba Road, Bengaluru, Karnataka, 560001, India (Default)");
 
     setTxt("demo-seniors", p.seniors_60plus || 0);
     setTxt("demo-adults", p.adults || 2);
@@ -2502,6 +2850,24 @@ window.toggleLeftDrawer = toggleLeftDrawer;
 
 
 
+function saveCustomBackend() {
+    const urlInput = document.getElementById("input-backend-url");
+    if (!urlInput) return;
+    let url = urlInput.value.trim();
+    if (url) {
+        if (url.endsWith("/")) {
+            url = url.slice(0, -1);
+        }
+        localStorage.setItem("custom_backend_url", url);
+        showToast("Backend URL updated! Reloading application...");
+    } else {
+        localStorage.removeItem("custom_backend_url");
+        showToast("Cleared custom backend! Resetting to default hosts...");
+    }
+    setTimeout(() => window.location.reload(), 1500);
+}
+
+window.saveCustomBackend = saveCustomBackend;
 window.runDemoStep = runDemoStep;
 window.openBlueprintUploadModal = openBlueprintUploadModal;
 window.closeBlueprintUploadModal = closeBlueprintUploadModal;
@@ -2533,6 +2899,163 @@ window.focusCesiumBuilding = focusCesiumBuilding;
 window.setCesiumCameraAngle = setCesiumCameraAngle;
 window.updateCesiumExplodedView = updateCesiumExplodedView;
 
+function toggleCesiumControlsMinimize() {
+    const body = document.getElementById("cesium-controls-body");
+    const icon = document.getElementById("cesium-controls-minimize-icon");
+    if (!body) return;
+    const isHidden = body.classList.toggle("hidden");
+    if (icon) {
+        icon.innerText = isHidden ? "➕" : "➖";
+    }
+}
+
+function makeElementDraggable(elmnt, dragHandle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    if (dragHandle) {
+        dragHandle.onmousedown = dragMouseDown;
+    } else {
+        elmnt.onmousedown = dragMouseDown;
+    }
+
+    function dragMouseDown(e) {
+        e = e || window.event;
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'select' || tag === 'button' || tag === 'option' || e.target.closest('button')) {
+            return;
+        }
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        elmnt.style.bottom = "auto";
+        elmnt.style.right = "auto";
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
+}
+
+function syncMapToGPS() {
+    if (!navigator.geolocation) {
+        showToast("❌ Geolocation is not supported by your browser");
+        return;
+    }
+    showToast("🛰️ Connecting to GPS satellites...");
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            ANCHOR_LAT = lat;
+            ANCHOR_LON = lon;
+            
+            showToast(`📍 GPS coordinates locked: ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+            
+            if (isCesiumInitialized && cesiumViewer) {
+                const pos = Cesium.Cartographic.fromDegrees(lon, lat);
+                let height = cesiumViewer.scene.globe.getHeight(pos) || 0.0;
+                
+                const proceedWithLocation = (h) => {
+                    ANCHOR_HEIGHT = h;
+                    setupCesiumAnchor();
+                    currentOverpassFootprint = null;
+                    
+                    const proceduralData = generate3DBuildingFloors(lat, lon, 16.0, "My GPS Building");
+                    allParcelsData = proceduralData;
+                    renderParcelsInCesium();
+                    if (proceduralData.length > 0) {
+                        selectParcelByData(proceduralData[0]);
+                    }
+                    
+                    fetchBuildingFootprint(lat, lon, (geometry, tags) => {
+                        currentOverpassFootprint = geometry;
+                        const area = getPolygonArea(geometry);
+                        
+                        let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
+                        let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
+                        const bName = tags['name'] || tags['addr:housename'] || "My GPS Building";
+                        
+                        const generated = generate3DBuildingFloors(lat, lon, realHeight, bName, realLevels);
+                        generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
+                        allParcelsData = generated;
+                        renderParcelsInCesium();
+                        if (generated.length > 0) {
+                            selectParcelByData(generated[0]);
+                        }
+                    }, () => {});
+                    
+                    const proxyNominatimUrl = `${API_BASE}/proxy/nominatim?lat=${lat}&lon=${lon}`;
+                    const directNominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18`;
+                    
+                    const handleGPSNominatim = (data) => {
+                        let realName = data.name || data.display_name || "My GPS Building";
+                        if (realName.length > 45) realName = realName.substring(0, 45) + "...";
+                        let fullAddress = data.display_name || "Unknown Location";
+                        currentGeocodedAddress = fullAddress;
+                        
+                        allParcelsData.forEach(p => {
+                            p.building_name = realName;
+                            p.geocoded_address = fullAddress;
+                        });
+                        renderParcelsInCesium();
+                        const currentSel = allParcelsData[0];
+                        if (currentSel) selectParcelByData(currentSel);
+                    };
+                    
+                    fetch(proxyNominatimUrl)
+                        .then(res => res.json())
+                        .then(data => handleGPSNominatim(data))
+                        .catch(() => {
+                            fetch(directNominatimUrl, { headers: { 'User-Agent': '3D-ULPIN-Cadastre-GIS' } })
+                                .then(res => res.json())
+                                .then(data => handleGPSNominatim(data))
+                                .catch(() => {});
+                        });
+                };
+                
+                if (cesiumViewer.terrainProvider) {
+                    Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, [pos])
+                        .then((updatedPositions) => {
+                            proceedWithLocation(updatedPositions[0].height || height);
+                        })
+                        .catch(() => {
+                            proceedWithLocation(height);
+                        });
+                } else {
+                    proceedWithLocation(height);
+                }
+            } else {
+                setupCesiumAnchor();
+                const proceduralData = generate3DBuildingFloors(lat, lon, 16.0, "My GPS Building");
+                allParcelsData = proceduralData;
+                refreshParcelRendering();
+            }
+        },
+        (error) => {
+            showToast("❌ Unable to retrieve GPS coordinates: Permission denied or timeout.");
+            console.error("GPS Sync error:", error);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+    );
+}
+
+window.toggleCesiumControlsMinimize = toggleCesiumControlsMinimize;
+window.makeElementDraggable = makeElementDraggable;
+window.syncMapToGPS = syncMapToGPS;
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(init, 100);
