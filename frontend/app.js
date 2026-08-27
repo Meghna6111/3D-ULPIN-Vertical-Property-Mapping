@@ -2985,6 +2985,9 @@ function launchGisDashboard() {
         landing.classList.add("opacity-0", "pointer-events-none");
         setTimeout(() => landing.classList.add("hidden"), 300);
     }
+    if (currentMapEngine !== 'cesium') {
+        switchMapEngine('cesium');
+    }
 }
 
 function returnToLandingScreen() {
