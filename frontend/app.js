@@ -525,48 +525,6 @@ function updateTelemetry(parcels) {
 // 3D WebGL Rendering & Dynamic Semantic Shaders
 // -----------------------------------------------------------------------------
 
-function getThreeJSFootprintShape(shapeType, w, d, customCoords = null) {
-    const shape = new THREE.Shape();
-    let pts = [];
-
-    if (customCoords && Array.isArray(customCoords) && customCoords.length >= 3) {
-        const lats = customCoords.map(c => c.lat);
-        const lons = customCoords.map(c => c.lon);
-        const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-        const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
-        const latMid = avgLat * Math.PI / 180;
-        const mPerDegLat = 111132.954;
-        const mPerDegLon = 111412.84 * Math.cos(latMid);
-
-        pts = customCoords.map(pt => [
-            (pt.lon - avgLon) * mPerDegLon,
-            (pt.lat - avgLat) * mPerDegLat
-        ]);
-    } else if (shapeType === 'oval') {
-        for (let i = 0; i < 32; i++) {
-            const angle = (i / 32) * Math.PI * 2;
-            pts.push([Math.cos(angle) * (w / 2), Math.sin(angle) * (d / 2)]);
-        }
-    } else if (shapeType === 'lshape') {
-        pts = [[-w/2, -d/2], [w/2, -d/2], [w/2, 0], [0, 0], [0, d/2], [-w/2, d/2]];
-    } else if (shapeType === 'tshape') {
-        pts = [[-w/2, -d/2], [w/2, -d/2], [w/2, -d/6], [w/6, -d/6], [w/6, d/2], [-w/6, d/2], [-w/6, -d/6], [-w/2, -d/6]];
-    } else if (shapeType === 'ushape') {
-        pts = [[-w/2, -d/2], [w/2, -d/2], [w/2, d/2], [w/3, d/2], [w/3, -d/6], [-w/3, -d/6], [-w/3, d/2], [-w/2, d/2]];
-    } else {
-        pts = [[-w/2, -d/2], [w/2, -d/2], [w/2, d/2], [-w/2, d/2]];
-    }
-
-    if (pts.length > 0) {
-        shape.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) {
-            shape.lineTo(pts[i][0], pts[i][1]);
-        }
-        shape.closePath();
-    }
-    return shape;
-}
-
 function renderParcels(parcels) {
     // Clear existing parcel meshes
     parcelMeshes.forEach(m => scene.remove(m));
@@ -574,25 +532,15 @@ function renderParcels(parcels) {
 
     parcels.forEach(p => {
         const b = p.bounds;
-        const width = Math.max(12.0, b.max_x - b.min_x);
-        const height = Math.max(2.8, b.max_z - b.min_z);
-        const depth = Math.max(10.0, b.max_y - b.min_y);
+        const width = b.max_x - b.min_x;
+        const height = b.max_z - b.min_z;
+        const depth = b.max_y - b.min_y;
 
         const posX = (b.min_x + b.max_x) / 2;
+        const posY = (b.min_z + b.max_z) / 2;
         const posZ = (b.min_y + b.max_y) / 2;
-        const posY = b.min_z;
 
-        let activeShape = cesiumFootprintShape;
-        if (activeShape === 'auto') {
-            activeShape = getEstimatedShape(p.building_name);
-        }
-
-        const threeShape = getThreeJSFootprintShape(activeShape, width, depth, currentOverpassFootprint);
-        const geo = new THREE.ExtrudeGeometry(threeShape, {
-            depth: height,
-            bevelEnabled: false
-        });
-        geo.rotateX(-Math.PI / 2); // Orient extrusion vertically in Three.js coordinates
+        const geo = new THREE.BoxGeometry(width, height, depth);
 
         // Color Semantics (Pillar 1):
         // Standard Above-Ground: Semi-transparent Slate Blue Glass (#1e293b / #38bdf8)
@@ -647,7 +595,6 @@ function renderParcels(parcels) {
             metalness: 0.25,
             transparent: true,
             opacity: opacity,
-            side: THREE.DoubleSide
         });
 
         const mesh = new THREE.Mesh(geo, mat);
@@ -1800,9 +1747,6 @@ function renderParcelsInCesium() {
     const parcelsToRender = allParcelsData;
     if (parcelsToRender.length === 0) return;
 
-    // Synchronize Three.js 3D View model with current parcels and shape geometry
-    renderParcels(allParcelsData);
-
     // 1. Calculate overall building bounds and hierarchy for the cage
     let minZTotal = Infinity;
     let maxZTotal = -Infinity;
@@ -2124,24 +2068,19 @@ function getFriendlyBuildingName(feature) {
 function getEstimatedShape(name) {
     const n = String(name || "").toLowerCase();
     
-    // Oval: Stadiums, sports arenas, domes, circular courts, grounds, tracks
-    if (n.includes("tennis") || n.includes("stadium") || n.includes("arena") || n.includes("association") || n.includes("sports") || n.includes("dome") || n.includes("circular") || n.includes("ground") || n.includes("colosseum")) {
+    // Stadiums, sports arenas, tennis courts, association structures -> Oval
+    if (n.includes("tennis") || n.includes("stadium") || n.includes("arena") || n.includes("association") || n.includes("sports") || n.includes("court")) {
         return "oval";
     }
     
-    // U-Shape: Malls, courtyards, high courts, secretariats, university campuses, medical centers, plazas
-    if (n.includes("mall") || n.includes("plaza") || n.includes("complex") || n.includes("court") || n.includes("square") || n.includes("university") || n.includes("campus") || n.includes("hospital") || n.includes("palace") || n.includes("secretariat")) {
+    // Malls, complex plazas with courtyards, universities -> U-shape
+    if (n.includes("mall") || n.includes("plaza") || n.includes("complex") || n.includes("court") || n.includes("square") || n.includes("university")) {
         return "ushape";
     }
     
-    // L-Shape: Corner buildings, angled wings, residential blocks, annexes, junctions
-    if (n.includes("corner") || n.includes("junction") || n.includes("l-shape") || n.includes("wing") || n.includes("annex") || n.includes("residency") || n.includes("apartment") || n.includes("block")) {
+    // Corner buildings, angled junctions -> L-shape
+    if (n.includes("corner") || n.includes("junction") || n.includes("l-shape") || n.includes("wing")) {
         return "lshape";
-    }
-    
-    // T-Shape: Terminals, technology hubs, institutes, stations, cross-shaped structures
-    if (n.includes("terminal") || n.includes("station") || n.includes("institute") || n.includes("tech") || n.includes("park") || n.includes("hub") || n.includes("tribunal")) {
-        return "tshape";
     }
     
     // Default standard rectangle
@@ -2433,13 +2372,6 @@ function setupCesiumInteraction() {
                                 p.unit_label = p.unit_label.replace(bName, realName);
                                 p.geocoded_address = fullAddress;
                             });
-                            
-                            // If explicit real OSM polygon is not available, auto-morph the building footprint to match realName
-                            if (!lastRealOsmFootprint) {
-                                const newShape = getEstimatedShape(realName);
-                                const newDims = getEstimatedDimensions(realName, bHeight);
-                                currentOverpassFootprint = createSyntheticFootprint(lat, lon, newShape, newDims.width, newDims.depth);
-                            }
                             
                             renderParcelsInCesium();
                             const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id) || allParcelsData[0];
@@ -3040,9 +2972,6 @@ function launchGisDashboard() {
     if (landing) {
         landing.classList.add("opacity-0", "pointer-events-none");
         setTimeout(() => landing.classList.add("hidden"), 300);
-    }
-    if (currentMapEngine !== 'cesium') {
-        switchMapEngine('cesium');
     }
 }
 
