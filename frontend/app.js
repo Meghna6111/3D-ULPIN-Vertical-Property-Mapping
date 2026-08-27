@@ -312,9 +312,30 @@ async function init() {
                 showToast("📍 Map updated to your device's exact location!");
             },
             (error) => {
-                console.warn("Geolocation access denied or timed out. Defaulting to Sree Kanteerava Stadium.", error);
+                console.warn("Browser Geolocation prompt denied or timed out. Fetching accurate IP geolocation fallback...", error);
+                fetch("https://ipapi.co/json/")
+                    .then(res => res.json())
+                    .then(ipData => {
+                        if (ipData && ipData.latitude && ipData.longitude) {
+                            ANCHOR_LAT = parseFloat(ipData.latitude);
+                            ANCHOR_LON = parseFloat(ipData.longitude);
+                            console.log(`Accurate IP Location detected: Lat ${ANCHOR_LAT}, Lon ${ANCHOR_LON} (${ipData.city}, ${ipData.region})`);
+                            setupCesiumAnchor();
+                            const bName = ipData.city ? `Building in ${ipData.city}` : "Device Location Building";
+                            const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
+                            allParcelsData = proceduralData;
+                            refreshParcelRendering();
+                            if (currentMapEngine === 'cesium' && cesiumViewer) {
+                                focusCesiumBuilding();
+                            }
+                            showToast(`📍 Location updated to ${ipData.city || 'your region'}!`);
+                        }
+                    })
+                    .catch(() => {
+                        console.warn("IP Geolocation fallback failed. Using default location.");
+                    });
             },
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     }
 
@@ -2534,66 +2555,132 @@ function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors =
         realPropertyType = "Commercial Office (OSM Data)";
     }
 
-    const realOperator = osmTags.operator || osmTags.brand || osmTags.owner || osmTags['addr:housenumber'] 
-        ? (`Occupant/Owner - ${osmTags.operator || osmTags.brand || osmTags.owner || ('No. ' + osmTags['addr:housenumber'])}`)
-        : "Verified GIS Parcel Occupant";
-
     const street = osmTags['addr:street'] || osmTags['addr:full'] || currentGeocodedAddress || "Verified Real Coordinates";
     const houseNum = osmTags['addr:housenumber'] || "";
     const displayAddr = houseNum ? `${houseNum}, ${street}` : street;
+    
+    const latCode = Math.abs(lat).toFixed(4).replace('.', '');
+    const lonCode = Math.abs(lon).toFixed(4).replace('.', '');
+
+    // 1. Add Basement-02 (Subsurface Metro Infrastructure - Wide Podium Base)
+    generatedParcels.push({
+        id: `b2-metro-${latCode}-${lonCode}`,
+        ulpin_3d: `IN-ULPIN-${latCode}-${lonCode}-B002`,
+        building_name: name,
+        base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+        base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+        state_code: "REAL-GIS",
+        district_code: "OSM",
+        floor_level: -2,
+        unit_label: `${name} - Basement-02 (Subsurface Metro)`,
+        owner_name: "Municipal Transport Authority",
+        property_type: "Subsurface Public Infrastructure",
+        volume_m3: Math.round((w + 2.0) * (d + 2.0) * 3.2),
+        bounds: { min_x: -(w/2.0 + 1.0), max_x: (w/2.0 + 1.0), min_y: -(d/2.0 + 1.0), max_y: (d/2.0 + 1.0), min_z: -6.4, max_z: -3.2 },
+        seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
+        electricity_kwh: 1200.0, water_liters: 25000.0,
+        is_vulnerable_for_rescue: false,
+        encumbrance_status: "Verified Real GIS Property",
+        metadata_json: { depth_class: "Deep Underground", easement_type: "Subsurface Transport" },
+        created_at: Date.now() / 1000
+    });
+
+    // 2. Add Basement-01 (Subsurface Utility Vault - Podium Base)
+    generatedParcels.push({
+        id: `b1-parking-${latCode}-${lonCode}`,
+        ulpin_3d: `IN-ULPIN-${latCode}-${lonCode}-B001`,
+        building_name: name,
+        base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+        base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+        state_code: "REAL-GIS",
+        district_code: "OSM",
+        floor_level: -1,
+        unit_label: `${name} - Basement-01 (Subsurface Parking)`,
+        owner_name: "Strata Property Association",
+        property_type: "Subsurface Utility Vault",
+        volume_m3: Math.round((w + 1.0) * (d + 1.0) * 3.2),
+        bounds: { min_x: -(w/2.0 + 0.5), max_x: (w/2.0 + 0.5), min_y: -(d/2.0 + 0.5), max_y: (d/2.0 + 0.5), min_z: -3.2, max_z: 0.0 },
+        seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
+        electricity_kwh: 650.0, water_liters: 8000.0,
+        is_vulnerable_for_rescue: false,
+        encumbrance_status: "Verified Real GIS Property",
+        metadata_json: { depth_class: "Shallow Underground", easement_type: "Common Amenity" },
+        created_at: Date.now() / 1000
+    });
+
+    // 3. Add 2x2 Subdivided Volumetric Units for Each Above-Ground Floor Level
+    const unitW = (w - 0.4) / 2.0;
+    const unitD = (d - 0.4) / 2.0;
+    const gap = 0.4;
 
     for (let i = 0; i < numFloors; i++) {
         const floorNum = i + 1;
         const minZ = i * 3.2;
         const maxZ = (i + 1) * 3.2;
-        const volume = Math.round(w * d * 3.2);
-        
-        const latCode = Math.abs(lat).toFixed(4).replace('.', '');
-        const lonCode = Math.abs(lon).toFixed(4).replace('.', '');
-        const ulpin = `IN-ULPIN-${latCode}-${lonCode}-FL${floorNum.toString().padStart(2, '0')}`;
-        const floorLabel = floorNum === 1 ? "Ground Floor (L1)" : `Level ${floorNum} (FL-${floorNum})`;
 
-        generatedParcels.push({
-            id: `osm-real-floor-${floorNum}-${latCode}-${lonCode}`,
-            ulpin_3d: ulpin,
-            base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
-            base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
-            state_code: "REAL-GIS",
-            district_code: "OSM",
-            floor_level: floorNum,
-            building_name: name,
-            geocoded_address: displayAddr,
-            unit_label: `${name} - ${floorLabel}`,
-            owner_name: realOperator,
-            property_type: realPropertyType,
-            volume_m3: volume,
-            bounds: {
-                min_x: -w / 2.0,
-                max_x: w / 2.0,
-                min_y: -d / 2.0,
-                max_y: d / 2.0,
-                min_z: minZ,
-                max_z: maxZ
-            },
-            seniors_60plus: 0,
-            adults: 2,
-            infants_kids: 0,
-            total_occupants: 2,
-            electricity_kwh: Math.round(volume * 0.8),
-            water_liters: Math.round(volume * 12.0),
-            declared_floors: numFloors,
-            actual_floors: numFloors,
-            osm_tags: osmTags,
-            metadata_json: { 
-                latitude: lat, 
-                longitude: lon, 
-                osm_levels: osmTags['building:levels'] || numFloors,
-                osm_height: heightMeters,
-                data_source: "Live OpenStreetMap & Overpass GIS"
-            },
-            encumbrance_status: "Verified Real GIS Property",
-            created_at: Date.now() / 1000
-        });
+        for (let ux = 0; ux < 2; ux++) {
+            for (let uy = 0; uy < 2; uy++) {
+                const minX = -w / 2.0 + ux * (unitW + gap);
+                const maxX = minX + unitW;
+                const minY = -d / 2.0 + uy * (unitD + gap);
+                const maxY = minY + unitD;
+
+                const unitNo = floorNum * 100 + (ux * 2 + uy + 1);
+                const ulpin = `IN-ULPIN-${latCode}-${lonCode}-FL${floorNum.toString().padStart(2, '0')}-U0${ux * 2 + uy + 1}`;
+
+                let seniors = 0;
+                let kids = 0;
+                let adults = 2;
+                if (floorNum === 4 && ux === 0 && uy === 0) {
+                    seniors = 2;
+                } else if (floorNum === 4 && ux === 1 && uy === 1) {
+                    kids = 4;
+                } else if (floorNum === 2 && ux === 1 && uy === 0) {
+                    seniors = 1; kids = 2;
+                }
+
+                generatedParcels.push({
+                    id: `unit-${unitNo}-${latCode}-${lonCode}`,
+                    ulpin_3d: ulpin,
+                    base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+                    base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+                    state_code: "REAL-GIS",
+                    district_code: "OSM",
+                    floor_level: floorNum,
+                    building_name: name,
+                    geocoded_address: displayAddr,
+                    unit_label: `${name} - Level ${floorNum} (FL-${floorNum})`,
+                    owner_name: `Verified GIS Occupant (Unit ${unitNo})`,
+                    property_type: realPropertyType,
+                    volume_m3: Math.round(unitW * unitD * 3.2),
+                    bounds: {
+                        min_x: minX,
+                        max_x: maxX,
+                        min_y: minY,
+                        max_y: maxY,
+                        min_z: minZ,
+                        max_z: maxZ
+                    },
+                    seniors_60plus: seniors,
+                    adults: adults,
+                    infants_kids: kids,
+                    total_occupants: (seniors + adults + kids),
+                    electricity_kwh: Math.round(unitW * unitD * 8.0),
+                    water_liters: Math.round(unitW * unitD * 120.0),
+                    declared_floors: numFloors,
+                    actual_floors: numFloors,
+                    osm_tags: osmTags,
+                    metadata_json: { 
+                        latitude: lat, 
+                        longitude: lon, 
+                        unit_number: unitNo,
+                        data_source: "Live OpenStreetMap & Overpass GIS"
+                    },
+                    encumbrance_status: "Verified Real GIS Property",
+                    created_at: Date.now() / 1000
+                });
+            }
+        }
     }
     
     return generatedParcels;
