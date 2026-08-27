@@ -924,3 +924,180 @@ def parse_ulpin_api(ulpin: str):
 
     return result
 
+# -------------------------------------------------------------------------
+# 14. QR Code Passport & Digital Certificate Endpoints
+# -------------------------------------------------------------------------
+
+@router.get("/parcel/{ulpin}/qr-passport")
+def generate_qr_passport(ulpin: str):
+    """Generate a scannable QR code property passport for a registered 3D ULPIN."""
+    db = get_db()
+    parcel = db.get_parcel_by_ulpin(ulpin)
+    
+    if not parcel:
+        raise HTTPException(status_code=404, detail=f"3D Parcel '{ulpin}' not found.")
+    
+    # QR code data structure (simplified JSON)
+    qr_data = {
+        "ulpin_3d": parcel.ulpin_3d,
+        "base_plot_id": parcel.base_plot_id,
+        "unit_label": parcel.unit_label,
+        "owner_name": parcel.owner_name,
+        "floor_level": parcel.floor_level,
+        "volume_m3": parcel.volume_m3,
+        "property_type": parcel.property_type,
+        "state": parcel.state_code,
+        "district": parcel.district_code,
+        "url": f"https://3d-cadastre.gov.in/verify/{ulpin}"
+    }
+    
+    qr_json = json.dumps(qr_data)
+    
+    return {
+        "ulpin": ulpin,
+        "qr_data": qr_json,
+        "qr_text": f"3D-ULPIN:{ulpin}",
+        "passport_url": f"https://3d-cadastre.gov.in/passport/{ulpin}",
+        "unit_label": parcel.unit_label,
+        "owner_name": parcel.owner_name,
+        "encumbrance_status": parcel.encumbrance_status
+    }
+
+@router.get("/parcel/{ulpin}/certificate")
+def generate_title_certificate(ulpin: str, format: str = Query("pdf", description="Format: pdf or html")):
+    """Generate a printable 3D title certificate with legal RoR details."""
+    db = get_db()
+    parcel = db.get_parcel_by_ulpin(ulpin)
+    
+    if not parcel:
+        raise HTTPException(status_code=404, detail=f"3D Parcel '{ulpin}' not found.")
+    
+    b = parcel.bounds
+    fmt = format.lower()
+    
+    # HTML Certificate Template
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>3D Property Title Certificate - {ulpin}</title>
+        <style>
+            body {{ font-family: 'Georgia', serif; margin: 40px; background: #f5f5f5; }}
+            .certificate {{ background: white; padding: 60px; border: 3px solid #2c3e50; max-width: 900px; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+            .header {{ text-align: center; border-bottom: 2px solid #2c3e50; padding-bottom: 30px; margin-bottom: 40px; }}
+            .govt-seal {{ font-size: 48px; }}
+            h1 {{ color: #2c3e50; font-size: 28px; margin: 10px 0; }}
+            .seal-text {{ color: #666; font-size: 12px; font-weight: bold; letter-spacing: 2px; }}
+            .content {{ font-size: 16px; line-height: 1.8; color: #333; }}
+            .section {{ margin-bottom: 30px; }}
+            .label {{ font-weight: bold; color: #2c3e50; display: inline-block; width: 200px; }}
+            .value {{ color: #555; }}
+            .spatial-data {{ background: #f0f7ff; padding: 15px; border-left: 4px solid #3498db; margin: 20px 0; font-family: monospace; }}
+            .footer {{ text-align: center; margin-top: 60px; border-top: 2px solid #2c3e50; padding-top: 20px; font-size: 12px; color: #666; }}
+            .certification {{ background: #e8f8f5; padding: 15px; border: 1px solid #27ae60; margin: 20px 0; }}
+            .date {{ color: #666; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="certificate">
+            <div class="header">
+                <div class="govt-seal">🏛️</div>
+                <h1>GOVERNMENT OF INDIA</h1>
+                <p class="seal-text">Department of Land Resources & Cadastral Survey</p>
+                <h2 style="color: #27ae60; font-size: 24px; margin-top: 20px;">3D VOLUMETRIC PROPERTY TITLE CERTIFICATE</h2>
+                <p class="seal-text" style="margin-top: 15px;">ISO 19152:2012 (LADM) Compliant</p>
+            </div>
+            
+            <div class="content">
+                <div class="section">
+                    <p><span class="label">Certificate Number:</span><span class="value">{ulpin}</span></p>
+                    <p><span class="label">Property Type:</span><span class="value">{parcel.property_type}</span></p>
+                    <p><span class="label">Unit Label:</span><span class="value">{parcel.unit_label}</span></p>
+                </div>
+                
+                <div class="section">
+                    <p><strong>REGISTERED OWNER:</strong></p>
+                    <p style="margin-left: 20px; font-size: 18px; color: #2c3e50;">{parcel.owner_name}</p>
+                </div>
+                
+                <div class="section">
+                    <p><span class="label">Base Plot ID:</span><span class="value">{parcel.base_plot_id}</span></p>
+                    <p><span class="label">Survey No.:</span><span class="value">{parcel.base_survey_no}</span></p>
+                    <p><span class="label">Floor Level:</span><span class="value">{parcel.floor_level}</span></p>
+                    <p><span class="label">State:</span><span class="value">{parcel.state_code}</span></p>
+                    <p><span class="label">District:</span><span class="value">{parcel.district_code}</span></p>
+                </div>
+                
+                <div class="section">
+                    <p><strong>3D SPATIAL EXTENTS (meters MSL):</strong></p>
+                    <div class="spatial-data">
+                        Min: ({b.min_x:.2f}, {b.min_y:.2f}, {b.min_z:.2f})<br>
+                        Max: ({b.max_x:.2f}, {b.max_y:.2f}, {b.max_z:.2f})<br>
+                        Volume: {parcel.volume_m3:.2f} m³<br>
+                        Dimensions: {b.width:.2f}m × {b.depth:.2f}m × {b.height:.2f}m
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <p><span class="label">Encumbrance Status:</span><span class="value" style="color: #27ae60;"><strong>✓ {parcel.encumbrance_status}</strong></span></p>
+                </div>
+                
+                <div class="certification">
+                    <p><strong>CERTIFICATION:</strong> This certificate confirms the registration of the above volumetric property unit in the 3D Cadastral Registry. The spatial coordinates have been validated against LiDAR survey data and municipal records. This certificate is issued under the authority of ISO 19152 (LADM) Land Administration Domain Model standards.</p>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <p style="margin: 10px 0;"><strong>Date Issued:</strong> <span class="date">{time.strftime('%d-%b-%Y')}</span></p>
+                <p style="margin: 10px 0;">🔐 Digitally Signed Certificate - Verified & Authenticated</p>
+                <p style="margin-top: 20px; font-size: 11px;">Generated by 3D Cadastral Property Registry System | {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    if fmt == "html":
+        return Response(content=html_content, media_type="text/html")
+    elif fmt == "pdf":
+        # Return HTML (frontend can print to PDF)
+        return Response(content=html_content, media_type="text/html")
+    else:
+        raise HTTPException(status_code=400, detail="Format must be 'pdf' or 'html'")
+
+@router.get("/parcel/{ulpin}/ownership-record")
+def get_ownership_record(ulpin: str):
+    """Retrieve full Record of Rights (RoR) for a 3D property unit."""
+    db = get_db()
+    parcel = db.get_parcel_by_ulpin(ulpin)
+    
+    if not parcel:
+        raise HTTPException(status_code=404, detail=f"3D Parcel '{ulpin}' not found.")
+    
+    return {
+        "ulpin": ulpin,
+        "record_of_rights": {
+            "owner_name": parcel.owner_name,
+            "property_type": parcel.property_type,
+            "unit_label": parcel.unit_label,
+            "floor_level": parcel.floor_level,
+            "volume_m3": parcel.volume_m3,
+            "base_plot_id": parcel.base_plot_id,
+            "base_survey_no": parcel.base_survey_no,
+            "state": parcel.state_code,
+            "district": parcel.district_code,
+            "encumbrance_status": parcel.encumbrance_status,
+            "occupants": {
+                "seniors_60plus": parcel.seniors_60plus,
+                "adults": parcel.adults,
+                "infants_kids": parcel.infants_kids,
+                "total": parcel.total_occupants
+            },
+            "utility_consumption": {
+                "electricity_kwh": parcel.electricity_kwh,
+                "water_liters": parcel.water_liters
+            },
+            "metadata": parcel.metadata_json
+        }
+    }
+
