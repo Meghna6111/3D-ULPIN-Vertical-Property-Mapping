@@ -1,5 +1,5 @@
 /**
- * SIH26011: 3D ULPIN Volumetric Cadastral Visualization Client
+ * 3D ULPIN Volumetric Cadastral Visualization Client
  * Three.js WebGL Engine, Interactive Raycaster, Strata Slicing,
  * NDRF Disaster Rescue Mode, Density Heatmap, AI Pipelines, and QR Title Certificate Generator
  */
@@ -25,6 +25,7 @@ let selectedOsmFeature = null;
 let cesiumRotationAngle = 0;
 let cesiumFootprintShape = "auto";
 let currentOverpassFootprint = null;
+let lastRealOsmFootprint = null;
 
 let ANCHOR_LAT = 12.96945;
 let ANCHOR_LON = 77.5927;
@@ -234,6 +235,7 @@ async function init() {
                     // Fetch exact footprint geometry for device location
                     fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
+                        lastRealOsmFootprint = geometry;
                         const area = getPolygonArea(geometry);
                         
                         let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
@@ -1828,8 +1830,8 @@ function renderParcelsInCesium() {
             ];
         }
 
-        // Use currentOverpassFootprint ONLY when footprint shape mode is set to 'auto'
-        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
+        // Always use currentOverpassFootprint when available (real OSM or synthetic shape)
+        if (currentOverpassFootprint) {
             const lats = currentOverpassFootprint.map(c => c.lat);
             const lons = currentOverpassFootprint.map(c => c.lon);
             const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
@@ -1986,7 +1988,7 @@ function renderParcelsInCesium() {
         const finalColor = isSelected ? Cesium.Color.CYAN.withAlpha(0.85) : color;
 
         let hierarchy;
-        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
+        if (currentOverpassFootprint) {
             if (cesiumRotationAngle !== 0) {
                 const lats = currentOverpassFootprint.map(c => c.lat);
                 const lons = currentOverpassFootprint.map(c => c.lon);
@@ -2086,83 +2088,80 @@ function getEstimatedShape(name) {
 }
 
 function fetchBuildingFootprint(lat, lon, successCallback, fallbackCallback) {
-    const proxyUrl = `${API_BASE}/proxy/overpass?lat=${lat}&lon=${lon}`;
-    const directUrl = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:50,${lat},${lon})[building];out geom;`;
+    const overpassQuery = `[out:json];(way(around:100,${lat},${lon})[building];way(around:100,${lat},${lon})["building:part"];way(around:100,${lat},${lon})[amenity];relation(around:100,${lat},${lon})[building];);out geom;`;
     
-    fetch(proxyUrl)
-        .then(res => {
-            if (!res.ok) throw new Error("Proxy failed");
-            return res.json();
-        })
-        .then(data => {
-            if (data && data.elements && data.elements.length > 0) {
-                let closestElement = null;
-                let minDistance = Infinity;
-                
-                data.elements.forEach(el => {
-                    if (el.geometry && el.geometry.length > 2) {
-                        let sumLat = 0, sumLon = 0;
-                        el.geometry.forEach(pt => {
-                            sumLat += pt.lat;
-                            sumLon += pt.lon;
-                        });
-                        const centLat = sumLat / el.geometry.length;
-                        const centLon = sumLon / el.geometry.length;
-                        
-                        const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
-                        if (dist < minDistance) {
-                            minDistance = dist;
-                            closestElement = el;
-                        }
-                    }
+    const urls = [
+        `${API_BASE}/proxy/overpass?lat=${lat}&lon=${lon}`,
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`,
+        `https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(overpassQuery)}`,
+        `https://overpass.private.coffee/api/interpreter?data=${encodeURIComponent(overpassQuery)}`
+    ];
+
+    function processElements(elements) {
+        if (!elements || elements.length === 0) return false;
+        
+        let closestElement = null;
+        let minDistance = Infinity;
+
+        elements.forEach(el => {
+            let pts = el.geometry;
+            if (!pts && el.members) {
+                // Flatten relation member geometries
+                pts = [];
+                el.members.forEach(m => {
+                    if (m.geometry) pts.push(...m.geometry);
                 });
+            }
+            
+            if (pts && pts.length > 2) {
+                let sumLat = 0, sumLon = 0;
+                pts.forEach(pt => {
+                    sumLat += pt.lat;
+                    sumLon += pt.lon;
+                });
+                const centLat = sumLat / pts.length;
+                const centLon = sumLon / pts.length;
                 
-                if (closestElement) {
-                    successCallback(closestElement.geometry, closestElement.tags || {});
-                    return;
+                const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestElement = { geometry: pts, tags: el.tags || {} };
                 }
             }
-            throw new Error("No building found via proxy");
-        })
-        .catch(err => {
-            console.warn("Proxy Overpass failed, trying direct OpenStreetMap fetch:", err);
-            fetch(directUrl)
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.elements && data.elements.length > 0) {
-                        let closestElement = null;
-                        let minDistance = Infinity;
-                        
-                        data.elements.forEach(el => {
-                            if (el.geometry && el.geometry.length > 2) {
-                                let sumLat = 0, sumLon = 0;
-                                el.geometry.forEach(pt => {
-                                    sumLat += pt.lat;
-                                    sumLon += pt.lon;
-                                });
-                                const centLat = sumLat / el.geometry.length;
-                                const centLon = sumLon / el.geometry.length;
-                                
-                                const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
-                                if (dist < minDistance) {
-                                    minDistance = dist;
-                                    closestElement = el;
-                                }
-                            }
-                        });
-                        
-                        if (closestElement) {
-                            successCallback(closestElement.geometry, closestElement.tags || {});
-                            return;
-                        }
-                    }
-                    fallbackCallback();
-                })
-                .catch(directErr => {
-                    console.warn("Direct Overpass API failed:", directErr);
-                    fallbackCallback();
-                });
         });
+
+        if (closestElement) {
+            successCallback(closestElement.geometry, closestElement.tags);
+            return true;
+        }
+        return false;
+    }
+
+    function tryFetch(index) {
+        if (index >= urls.length) {
+            console.warn("All Overpass footprint endpoints failed. Calling fallback callback.");
+            fallbackCallback();
+            return;
+        }
+
+        fetch(urls[index])
+            .then(res => {
+                if (!res.ok) throw new Error(`Endpoint ${index} HTTP error ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                const elements = data && data.elements;
+                if (!processElements(elements)) {
+                    tryFetch(index + 1);
+                }
+            })
+            .catch(err => {
+                console.warn(`Overpass endpoint ${index} failed:`, err);
+                tryFetch(index + 1);
+            });
+    }
+
+    tryFetch(0);
 }
 
 function getPolygonArea(coords) {
@@ -2266,6 +2265,7 @@ function setupCesiumInteraction() {
                     setupCesiumAnchor();
                     
                     currentOverpassFootprint = null;
+                    lastRealOsmFootprint = null;
                     
                     const bName = getFriendlyBuildingName(pickedObject);
                     let bHeight = pickedObject.getProperty('height');
@@ -2299,6 +2299,7 @@ function setupCesiumInteraction() {
                     // 1. Fetch exact footprint geometry from OpenStreetMap Overpass API
                     fetchBuildingFootprint(lat, lon, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
+                        lastRealOsmFootprint = geometry;
                         const area = getPolygonArea(geometry);
                         
                         // Set shape to auto to reflect real OSM footprint polygon
@@ -2624,15 +2625,33 @@ function updateCesiumFootprintShape(shape) {
     const d = firstParcel ? (firstParcel.bounds.max_y - firstParcel.bounds.min_y) : 24.0;
     
     if (shape !== 'auto') {
+        // Manual shape selected — generate synthetic footprint polygon for the chosen shape
         currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, shape, w, d);
+        renderParcelsInCesium();
+        showToast(`📐 3D Building morphed to: ${shape.toUpperCase()}`);
     } else {
-        const bName = firstParcel ? firstParcel.building_name : "Interactive 3D Building";
-        const estimated = getEstimatedShape(bName);
-        currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, estimated, w, d);
+        // Auto mode — re-fetch real building footprint from OpenStreetMap
+        if (lastRealOsmFootprint) {
+            currentOverpassFootprint = lastRealOsmFootprint;
+            renderParcelsInCesium();
+            showToast('🌍 Restored real OSM building footprint');
+        } else {
+            // Fetch fresh from Overpass
+            fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+                currentOverpassFootprint = geometry;
+                lastRealOsmFootprint = geometry;
+                renderParcelsInCesium();
+                showToast('🌍 Real OSM building footprint loaded');
+            }, () => {
+                // Fallback to estimated shape
+                const bName = firstParcel ? firstParcel.building_name : "Interactive 3D Building";
+                const estimated = getEstimatedShape(bName);
+                currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, estimated, w, d);
+                renderParcelsInCesium();
+                showToast('📐 Auto-estimated building shape applied');
+            });
+        }
     }
-    
-    renderParcelsInCesium();
-    showToast(`📐 3D Building footprint shape morphing to: ${shape.toUpperCase()}`);
 }
 window.updateCesiumFootprintShape = updateCesiumFootprintShape;
 
@@ -2938,7 +2957,7 @@ function printTitleCertificate() {
                 <div class="row"><span class="label">Encumbrance & Rights Status:</span><span class="value" style="color: #047857;">${document.getElementById("encumbrance-status")?.innerText || "Clear / Certified Freehold"}</span></div>
             </div>
             <div class="footer">
-                <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine (SIH26011)</p>
+                <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine</p>
             </div>
         </body>
         </html>
