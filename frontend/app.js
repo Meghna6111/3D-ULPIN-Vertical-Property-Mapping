@@ -2068,19 +2068,24 @@ function getFriendlyBuildingName(feature) {
 function getEstimatedShape(name) {
     const n = String(name || "").toLowerCase();
     
-    // Stadiums, sports arenas, tennis courts, association structures -> Oval
-    if (n.includes("tennis") || n.includes("stadium") || n.includes("arena") || n.includes("association") || n.includes("sports") || n.includes("court")) {
+    // Oval: Stadiums, sports arenas, domes, circular courts, grounds, tracks
+    if (n.includes("tennis") || n.includes("stadium") || n.includes("arena") || n.includes("association") || n.includes("sports") || n.includes("dome") || n.includes("circular") || n.includes("ground") || n.includes("colosseum")) {
         return "oval";
     }
     
-    // Malls, complex plazas with courtyards, universities -> U-shape
-    if (n.includes("mall") || n.includes("plaza") || n.includes("complex") || n.includes("court") || n.includes("square") || n.includes("university")) {
+    // U-Shape: Malls, courtyards, high courts, secretariats, university campuses, medical centers, plazas
+    if (n.includes("mall") || n.includes("plaza") || n.includes("complex") || n.includes("court") || n.includes("square") || n.includes("university") || n.includes("campus") || n.includes("hospital") || n.includes("palace") || n.includes("secretariat")) {
         return "ushape";
     }
     
-    // Corner buildings, angled junctions -> L-shape
-    if (n.includes("corner") || n.includes("junction") || n.includes("l-shape") || n.includes("wing")) {
+    // L-Shape: Corner buildings, angled wings, residential blocks, annexes, junctions
+    if (n.includes("corner") || n.includes("junction") || n.includes("l-shape") || n.includes("wing") || n.includes("annex") || n.includes("residency") || n.includes("apartment") || n.includes("block")) {
         return "lshape";
+    }
+    
+    // T-Shape: Terminals, technology hubs, institutes, stations, cross-shaped structures
+    if (n.includes("terminal") || n.includes("station") || n.includes("institute") || n.includes("tech") || n.includes("park") || n.includes("hub") || n.includes("tribunal")) {
+        return "tshape";
     }
     
     // Default standard rectangle
@@ -2372,6 +2377,13 @@ function setupCesiumInteraction() {
                                 p.unit_label = p.unit_label.replace(bName, realName);
                                 p.geocoded_address = fullAddress;
                             });
+                            
+                            // If explicit real OSM polygon is not available, auto-morph the building footprint to match realName
+                            if (!lastRealOsmFootprint) {
+                                const newShape = getEstimatedShape(realName);
+                                const newDims = getEstimatedDimensions(realName, bHeight);
+                                currentOverpassFootprint = createSyntheticFootprint(lat, lon, newShape, newDims.width, newDims.depth);
+                            }
                             
                             renderParcelsInCesium();
                             const currentSel = allParcelsData.find(x => cesiumSelectedEntity && x.ulpin_3d === cesiumSelectedEntity.id) || allParcelsData[0];
