@@ -1529,6 +1529,25 @@ async function initCesium() {
         cesiumViewer.scene.globe.enableLighting = true;
         cesiumViewer.scene.globe.depthTestAgainstTerrain = cesiumIonToken ? true : false;
 
+        // Enhanced High-Precision 3D Globe Camera Navigation (Pan, Tilt, Smooth Zoom, Orbit)
+        const controller = cesiumViewer.scene.screenSpaceCameraController;
+        controller.enableLook = true;
+        controller.enableRotate = true;
+        controller.enableZoom = true;
+        controller.enableTilt = true;
+        controller.enableTranslate = true;
+        controller.inertiaSpin = 0.88;
+        controller.inertiaTranslate = 0.88;
+        controller.inertiaZoom = 0.88;
+        controller.minimumZoomDistance = 2.0;
+        controller.maximumZoomDistance = 60000.0;
+        controller.zoomEventTypes = [Cesium.CameraEventType.WHEEL, Cesium.CameraEventType.PINCH];
+        controller.tiltEventTypes = [
+            Cesium.CameraEventType.RIGHT_DRAG, 
+            Cesium.CameraEventType.PINCH, 
+            { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL }
+        ];
+
         isCesiumInitialized = true;
         
         if (ANCHOR_LAT !== 12.96945 || ANCHOR_LON !== 77.5927) {
@@ -1908,23 +1927,30 @@ function renderParcelsInCesium() {
         });
         cesiumEntities.push(cageEntity);
 
-        // Center label for the whole building inside the cage
-        const centerLabelEntity = cesiumViewer.entities.add({
-            id: 'building-center-label',
-            position: centerPosition,
-            label: {
-                text: buildingName,
-                font: 'bold 12px Inter, sans-serif',
-                fillColor: Cesium.Color.WHITE,
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 4.0,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-                disableDepthTestDistance: Number.POSITIVE_INFINITY
-            }
-        });
-        cesiumEntities.push(centerLabelEntity);
+        // High-contrast 3D Place & Building Title Pill Label
+        if (isCesiumLabelsVisible) {
+            const displayAddressText = currentGeocodedAddress ? (currentGeocodedAddress.length > 40 ? currentGeocodedAddress.substring(0, 40) + '...' : currentGeocodedAddress) : "Verified GIS Parcel";
+            const centerLabelEntity = cesiumViewer.entities.add({
+                id: 'building-center-label',
+                position: centerPosition,
+                label: {
+                    text: `🏢 ${buildingName.toUpperCase()}\n📍 ${displayAddressText}`,
+                    font: 'bold 13px Inter, system-ui, sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.fromCssColorString('#0284c7'),
+                    outlineWidth: 3.0,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    showBackground: true,
+                    backgroundColor: Cesium.Color.fromCssColorString('#0f172a').withAlpha(0.90),
+                    backgroundPadding: new Cesium.Cartesian2(12, 7),
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                    scaleByDistance: new Cesium.NearFarScalar(40.0, 1.15, 3000.0, 0.60)
+                }
+            });
+            cesiumEntities.push(centerLabelEntity);
+        }
     }
 
     // 2. Render individual floors
@@ -2202,10 +2228,53 @@ function getPolygonArea(coords) {
     return Math.abs(area / 2);
 }
 
+let isCesiumLabelsVisible = true;
+let isCesiumOrbiting = false;
+let orbitTickListener = null;
+
+window.toggleCesiumLabels = function() {
+    isCesiumLabelsVisible = !isCesiumLabelsVisible;
+    const btn = document.getElementById("btn-toggle-labels");
+    if (btn) btn.innerText = isCesiumLabelsVisible ? "🏷️ Labels On" : "🏷️ Labels Off";
+    renderParcelsInCesium();
+    showToast(isCesiumLabelsVisible ? "🏷️ 3D Building & Place Labels Enabled" : "🏷️ Labels Hidden");
+};
+
+window.toggleCesiumOrbitTour = function() {
+    if (!cesiumViewer || !isCesiumInitialized) return;
+    isCesiumOrbiting = !isCesiumOrbiting;
+    const btn = document.getElementById("btn-orbit-tour");
+    if (btn) btn.innerText = isCesiumOrbiting ? "⏸️ Stop Tour" : "🔄 360° Tour";
+    
+    if (isCesiumOrbiting) {
+        let angle = 0;
+        orbitTickListener = cesiumViewer.clock.onTick.addEventListener(() => {
+            if (!isCesiumOrbiting) return;
+            angle += 0.005;
+            const distance = 95.0;
+            const heading = Cesium.Math.toRadians(angle * 50);
+            const pitch = Cesium.Math.toRadians(-28);
+            
+            const offset = new Cesium.HeadingPitchRange(heading, pitch, distance);
+            const center = localToGlobal(0, 0, 10);
+            cesiumViewer.camera.lookAt(center, offset);
+        });
+        showToast("🎥 360° Cinematic Orbit Tour Started!");
+    } else {
+        if (orbitTickListener) {
+            orbitTickListener();
+            orbitTickListener = null;
+        }
+        cesiumViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+        showToast("⏹️ Tour Paused");
+    }
+};
+
 function setupCesiumInteraction() {
     if (!cesiumViewer) return;
 
     cesiumMouseHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+    const tooltip = document.getElementById("cesium-hover-tooltip");
 
     cesiumMouseHandler.setInputAction(function (movement) {
         const pickedObject = cesiumViewer.scene.pick(movement.endPosition);
@@ -2214,6 +2283,7 @@ function setupCesiumInteraction() {
                 const entity = pickedObject.id;
                 if (entity.id === 'cesium-base-parcel') {
                     resetCesiumHovered();
+                    if (tooltip) tooltip.classList.add("hidden");
                     return;
                 }
 
@@ -2227,13 +2297,49 @@ function setupCesiumInteraction() {
                     }
                     document.body.style.cursor = "pointer";
                 }
+
+                // Display dynamic floating hover card tooltip
+                if (tooltip && entity.properties) {
+                    const p = entity.properties;
+                    tooltip.style.left = `${movement.endPosition.x + 15}px`;
+                    tooltip.style.top = `${movement.endPosition.y - 15}px`;
+                    tooltip.classList.remove("hidden");
+
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerText = val;
+                    };
+                    setVal("tooltip-title", p.building_name || "3D Volumetric Strata");
+                    setVal("tooltip-ulpin", p.ulpin_3d || "IN-ULPIN-3D");
+                    setVal("tooltip-floor", p.floor_level < 0 ? `B${p.floor_level}` : `FL-${p.floor_level}`);
+                    setVal("tooltip-vol", `${p.volume_m3 || 120} m³`);
+                    setVal("tooltip-occ", p.total_occupants || 2);
+                    setVal("tooltip-status", p.encumbrance_status || "Verified");
+                }
             } else if (pickedObject instanceof Cesium.Cesium3DTileFeature || pickedObject.getProperty) {
-                // Hovering over real city 3D building
                 document.body.style.cursor = "pointer";
+                if (tooltip) {
+                    const bName = getFriendlyBuildingName(pickedObject);
+                    tooltip.style.left = `${movement.endPosition.x + 15}px`;
+                    tooltip.style.top = `${movement.endPosition.y - 15}px`;
+                    tooltip.classList.remove("hidden");
+
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerText = val;
+                    };
+                    setVal("tooltip-title", bName);
+                    setVal("tooltip-ulpin", "OSM-3D-FEATURE");
+                    setVal("tooltip-floor", "Multi-Level");
+                    setVal("tooltip-vol", "OSM Footprint");
+                    setVal("tooltip-occ", "Public/Commercial");
+                    setVal("tooltip-status", "Real GIS Tile");
+                }
             }
         } else {
             resetCesiumHovered();
             document.body.style.cursor = "default";
+            if (tooltip) tooltip.classList.add("hidden");
         }
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
@@ -2800,14 +2906,36 @@ function setCesiumCameraAngle(angleType) {
 
     if (angleType === 'top') {
         smoothCesiumFlyTo({
-            destination: localToGlobal(0, 0, 80),
+            destination: localToGlobal(0, 0, 110),
             orientation: {
                 heading: Cesium.Math.toRadians(0),
                 pitch: Cesium.Math.toRadians(-90),
                 roll: 0.0
             },
-            duration: 1.0
+            duration: 1.2
         });
+    } else if (angleType === 'street') {
+        smoothCesiumFlyTo({
+            destination: localToGlobal(32, -40, 6),
+            orientation: {
+                heading: Cesium.Math.toRadians(325),
+                pitch: Cesium.Math.toRadians(-8),
+                roll: 0.0
+            },
+            duration: 1.2
+        });
+        showToast("🦅 Switched to Street Level View");
+    } else if (angleType === 'iso') {
+        smoothCesiumFlyTo({
+            destination: localToGlobal(45, -45, 55),
+            orientation: {
+                heading: Cesium.Math.toRadians(315),
+                pitch: Cesium.Math.toRadians(-45),
+                roll: 0.0
+            },
+            duration: 1.2
+        });
+        showToast("📐 Switched to 45° Architectural View");
     } else if (angleType === '3d') {
         smoothCesiumFlyTo({
             destination: localToGlobal(20, -25, 30),
