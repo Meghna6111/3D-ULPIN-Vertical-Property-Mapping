@@ -1,4 +1,4 @@
-# SIH26011: 3D ULPIN & Volumetric Cadastral System Dependencies
+# : 3D ULPIN & Volumetric Cadastral System Dependencies
 fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic>=2.6.0
@@ -11,3 +11,4 @@ pytest>=8.0.0
 httpx>=0.27.0
 geoalchemy2>=0.14.0
 psycopg2-binary>=2.9.9
+

@@ -4,7 +4,7 @@
 [![Tech Stack](https://img.shields.io/badge/Stack-Python%20%7C%20FastAPI%20%7C%20CesiumJS%20%7C%20PostGIS-blue.svg?style=flat-square)](#)
 [![Deployment](https://img.shields.io/badge/Deploy-Live-success.svg?style=flat-square)](https://propertymap-system.web.app)
 
-> **SIH26011** — An integrated, high-fidelity 3D spatial cadastre system that generates unique 3D Unified Land Parcel Identification Numbers (ULPINs), maps vertical properties, and detects zoning and boundary overlaps using PostGIS.
+> **** — An integrated, high-fidelity 3D spatial cadastre system that generates unique 3D Unified Land Parcel Identification Numbers (ULPINs), maps vertical properties, and detects zoning and boundary overlaps using PostGIS.
 
 ### 🌐 Live Production Application
 The frontend GIS interface is fully deployed and accessible at:
@@ -180,3 +180,4 @@ firebase deploy --non-interactive
 ## 9. Git Branch Strategy
 
 *Development is branch-isolated under `feature/*` branches and reviewed before merging to the `main` branch.*
+

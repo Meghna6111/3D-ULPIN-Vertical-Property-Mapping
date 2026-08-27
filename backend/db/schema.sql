@@ -1,5 +1,5 @@
 -- ============================================================================
--- SIH26011: 3D ULPIN Generation and Vertical Property Mapping System
+-- : 3D ULPIN Generation and Vertical Property Mapping System
 -- ISO 19152 (LADM) Compliant 3D Cadastral Spatial Schema
 -- PostgreSQL 14+ / PostGIS 3.1+ (with postgis_topology & postgis_raster)
 -- ============================================================================
@@ -76,3 +76,4 @@ BEGIN
       AND ST_3DIntersects(p.geom_3d, new_geom);
 END;
 $$ LANGUAGE plpgsql;
+

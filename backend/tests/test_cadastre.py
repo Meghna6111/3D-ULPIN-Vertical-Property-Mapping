@@ -1,5 +1,5 @@
 """
-Comprehensive Test Suite for SIH26011 3D ULPIN Cadastral System
+Comprehensive Test Suite for  3D ULPIN Cadastral System
 Validates 19-char 3D ULPIN generation, spatial collision rejection, Vision AI blueprint extraction,
 Scikit-Learn tax anomaly detection, Deed OCR, utility occupancy regression, property tax calculation,
 NDRF disaster rescue mode, and REST API endpoints.
@@ -76,6 +76,27 @@ def test_19char_ulpin_format_subsurface_basements():
     assert parsed_b2["valid"] is True
     assert parsed_b2["floor_level"] == -2
     assert parsed_b2["is_subsurface"] is True
+
+def test_19char_ulpin_rejects_invalid_grammar():
+    assert parse_19char_3d_ulpin("12A34B56C78D90-C003")["valid"] is False
+    with pytest.raises(ValueError):
+        generate_19char_3d_ulpin("short", 1)
+
+def test_api_ulpin_encode_and_decode():
+    res = client.post("/api/ulpin/encode", json={
+        "base_plot_id": "12A34B56C78D90",
+        "floor_level": 4,
+        "elevation_msl": 404.0,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["canonical_ulpin"] == "12A34B56C78D90-A004"
+    assert data["canonical_length"] == 19
+    assert data["extended_3d_ulpin"] == "12A34B56C78D90-F004-Z404"
+
+    decoded = client.get("/api/ulpin/decode/12A34B56C78D90-A004")
+    assert decoded.status_code == 200
+    assert decoded.json()["floor_level"] == 4
 
 def test_iso_tokenized_ulpin_generation():
     bounds = BoundingBox3DData(min_x=0.0, max_x=10.0, min_y=0.0, max_y=10.0, min_z=6.4, max_z=9.6)
@@ -298,3 +319,4 @@ def test_api_3d_spatial_exports():
     gltf_res = client.get(f"/api/parcel/{first_ulpin}/3d?format=gltf")
     assert gltf_res.status_code == 200
     assert "asset" in gltf_res.json()
+

@@ -10,18 +10,24 @@ import json
 
 from db.database import get_db
 from db.models import Parcel3DRecord, BoundingBox3DData
-from core.ulpin_engine import generate_19char_3d_ulpin, generate_3d_ulpin, parse_3d_ulpin
+from core.ulpin_engine import (
+    generate_19char_3d_ulpin,
+    generate_3d_ulpin,
+    parse_3d_ulpin,
+    parse_19char_3d_ulpin,
+    format_extended_3d_ulpin,
+)
 from core.topology_validator import TopologyValidator
 from core.tax_calculator import PropertyTaxCalculator
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ai-model')))
 
-from lidar_processor import LidarProcessor, generate_synthetic_building_points
-from vision_ai import BlueprintVisionAI
-from tax_anomaly import TaxAnomalyDetector
-from ocr_reader import DeedOcrReader
-from utility_estimator import UtilityOccupancyEstimator
+from lidar_processor import LidarProcessor, generate_synthetic_building_points  # type: ignore[import]
+from vision_ai import BlueprintVisionAI  # type: ignore[import]
+from tax_anomaly import TaxAnomalyDetector  # type: ignore[import]
+from ocr_reader import DeedOcrReader  # type: ignore[import]
+from utility_estimator import UtilityOccupancyEstimator  # type: ignore[import]
 
 from .schemas import (
     ParcelCreateSchema,
@@ -33,6 +39,9 @@ from .schemas import (
     DeedExtractRequestSchema,
     UtilityEstimateRequestSchema,
     NDRFRescueSummarySchema,
+    ULPINEncodeRequestSchema,
+    ULPINEncodeResponseSchema,
+    ULPINDecodeResponseSchema,
 )
 
 router = APIRouter()
@@ -43,6 +52,31 @@ tax_anomaly_detector = TaxAnomalyDetector()
 deed_ocr = DeedOcrReader()
 utility_estimator = UtilityOccupancyEstimator()
 tax_calculator = PropertyTaxCalculator()
+
+@router.post("/ulpin/encode", response_model=ULPINEncodeResponseSchema)
+def encode_ulpin(payload: ULPINEncodeRequestSchema):
+    """Create the canonical 19-character ID and its elevation-aware 3D form."""
+    try:
+        canonical = generate_19char_3d_ulpin(payload.base_plot_id, payload.floor_level)
+        extended = format_extended_3d_ulpin(
+            payload.base_plot_id, payload.floor_level, payload.elevation_msl
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "canonical_ulpin": canonical,
+        "extended_3d_ulpin": extended,
+        "base_plot_id": payload.base_plot_id.strip().upper(),
+        "floor_level": payload.floor_level,
+        "elevation_msl": payload.elevation_msl,
+        "canonical_length": len(canonical),
+    }
+
+@router.get("/ulpin/decode/{ulpin}", response_model=ULPINDecodeResponseSchema)
+def decode_ulpin(ulpin: str):
+    """Validate and decode a canonical 19-character 3D ULPIN."""
+    return parse_3d_ulpin(ulpin)
 
 # -----------------------------------------------------------------------------
 # 1. 3D Cadastral Parcels & Spatial Geometry
@@ -802,7 +836,7 @@ def get_config():
 @router.get("/proxy/overpass")
 def proxy_overpass(lat: float, lon: float):
     """Proxy Overpass API requests to bypass CORS restrictions in hosted environments."""
-    import requests
+    import requests  # type: ignore[import]
     url = f"https://overpass-api.de/api/interpreter?data=[out:json];(way(around:100,{lat},{lon})[building];way(around:100,{lat},{lon})[\"building:part\"];way(around:100,{lat},{lon})[amenity];);out geom;"
     try:
         response = requests.get(url, timeout=10, headers={"User-Agent": "3D-ULPIN-Cadastre-GIS/1.0"})
@@ -816,7 +850,7 @@ def proxy_overpass(lat: float, lon: float):
 @router.get("/proxy/nominatim")
 def proxy_nominatim(lat: float, lon: float):
     """Proxy Nominatim API requests to bypass CORS restrictions in hosted environments."""
-    import requests
+    import requests  # type: ignore[import]
     url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=18"
     try:
         response = requests.get(url, timeout=10, headers={"User-Agent": "3D-ULPIN-Cadastre-GIS/1.0"})
@@ -826,4 +860,67 @@ def proxy_nominatim(lat: float, lon: float):
     except Exception as e:
         print(f"Nominatim Proxy error: {e}")
         return {}
+    # -------------------------------------------------------------------------
+# 13. 3D ULPIN Generation & Validation API
+# -------------------------------------------------------------------------
+
+@router.get("/ulpin/generate")
+def generate_ulpin_api(
+    base_plot: str = Query(..., description="14-character base plot ID"),
+    floor_level: int = Query(..., description="Floor level: 0=Ground, positive=Floor, negative=Basement")
+):
+    """
+    Generate standardized 19-character 3D ULPIN.
+
+    Example:
+    base_plot = 12A34B56C78D90
+    floor_level = 3
+
+    Result:
+    12A34B56C78D90-A003
+    """
+
+    try:
+        ulpin = generate_19char_3d_ulpin(
+            base_plot=base_plot,
+            floor_level=floor_level
+        )
+
+        parsed = parse_19char_3d_ulpin(ulpin)
+
+        return {
+            "success": True,
+            "ulpin_3d": ulpin,
+            "base_plot": base_plot.upper(),
+            "floor_level": floor_level,
+            "floor_tag": parsed["floor_tag"],
+            "is_subsurface": parsed["is_subsurface"],
+            "standard": "19-Char 3D Bhu-Aadhaar"
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+
+@router.get("/ulpin/parse/{ulpin}")
+def parse_ulpin_api(ulpin: str):
+    """
+    Validate and decode a 19-character 3D ULPIN.
+    """
+
+    result = parse_3d_ulpin(ulpin)
+
+    if not result.get("valid"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get(
+                "error",
+                "Invalid 3D ULPIN"
+            )
+        )
+
+    return result
 

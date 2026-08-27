@@ -1,5 +1,5 @@
 /**
- * SIH26011: 3D ULPIN Volumetric Cadastral Visualization Client
+ * : 3D ULPIN Volumetric Cadastral Visualization Client
  * Three.js WebGL Engine, Interactive Raycaster, Strata Slicing,
  * NDRF Disaster Rescue Mode, Density Heatmap, AI Pipelines, and QR Title Certificate Generator
  */
@@ -2938,7 +2938,7 @@ function printTitleCertificate() {
                 <div class="row"><span class="label">Encumbrance & Rights Status:</span><span class="value" style="color: #047857;">${document.getElementById("encumbrance-status")?.innerText || "Clear / Certified Freehold"}</span></div>
             </div>
             <div class="footer">
-                <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine (SIH26011)</p>
+                <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine ()</p>
             </div>
         </body>
         </html>
@@ -3335,3 +3335,4 @@ if (document.readyState === "complete" || document.readyState === "interactive")
 } else {
     window.addEventListener("DOMContentLoaded", () => setTimeout(init, 100));
 }
+

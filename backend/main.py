@@ -1,5 +1,5 @@
 """
-SIH26011: 3D ULPIN Generation and Vertical Property Mapping System
+: 3D ULPIN Generation and Vertical Property Mapping System
 Main FastAPI Application Entrypoint with Lifespan Management
 """
 from fastapi import FastAPI
@@ -24,10 +24,20 @@ async def lifespan(app: FastAPI):
     # Shutdown logic if needed
 
 app = FastAPI(
-    title="3D ULPIN & Volumetric Cadastral Mapping Engine (SIH26011)",
+
+    title="3D ULPIN & Volumetric Cadastral Mapping Engine ()",
+
     description="ISO 19152 (LADM) Compliant 3D Cadastral Spatial Engine for Vertical Property Mapping",
+
     version="2.0.0",
+
     lifespan=lifespan,
+
+    docs_url=None,
+
+    redoc_url=None,
+
+    openapi_url=None,
 )
 
 app.add_middleware(

@@ -52,7 +52,7 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D ULPIN Spatial Engine (SIH26011)</title>
+    <title>3D ULPIN Spatial Engine ()</title>
     
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -129,13 +129,16 @@
         .font-mono {
             font-family: 'JetBrains Mono', monospace !important;
         }
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: var(--bg-page);
-            color: var(--text-primary);
-            -webkit-font-smoothing: antialiased;
-            transition: background-color 0.3s ease, color 0.3s ease;
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    user-select: text;
+    -webkit-user-select: text;
+}
         }
         
         #canvas-container, #cesium-container {
@@ -266,7 +269,7 @@
         }
     </style>
 </head>
-<body class="select-none dark-mode">
+<body class="dark-mode">
     <div id="debug-err-banner" style="display:none; position:fixed; top:85px; left:20px; z-index:999999; background:rgba(220,38,38,0.95); color:white; padding:12px 24px; border-radius:12px; font-family:monospace; max-width:80%; word-break:break-all; box-shadow:0 10px 25px rgba(0,0,0,0.6);"></div>
 
     <!-- 1. LANDING PAGE HERO SCREEN OVERLAY -->
@@ -280,7 +283,7 @@
                 <div>
                     <h1 class="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                         3D ULPIN Spatial Engine
-                        <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30">SIH26011</span>
+                        <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30"></span>
                     </h1>
                     <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Bhu-Aadhaar 3D • ISO 19152 (LADM) • DoLR</p>
                 </div>
@@ -303,7 +306,7 @@
         <main class="max-w-6xl mx-auto w-full px-6 py-12 text-center flex-1 flex flex-col items-center justify-center">
             <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold mb-6 shadow-sm">
                 <span class="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-ping"></span>
-                SIH26011 Winner Prototype • ISO 19152 (LADM) Compliant
+                 Winner Prototype • ISO 19152 (LADM) Compliant
             </div>
 
             <h2 class="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl leading-[1.15]">
@@ -368,7 +371,7 @@
 
         <!-- Landing Footer -->
         <footer class="max-w-7xl mx-auto w-full px-6 py-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs theme-text-muted font-medium gap-3">
-            <div>© 2026 SIH26011 3D Cadastre Prototype • ISO 19152 (LADM) • Department of Land Resources</div>
+            <div>© 2026  3D Cadastre Prototype • ISO 19152 (LADM) • Department of Land Resources</div>
             <div class="flex items-center space-x-4">
                 <span class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Backend API Connected</span>
                 <span>FastAPI + PostGIS + CesiumJS</span>
@@ -398,7 +401,7 @@
                 <div>
                     <h1 class="text-base font-extrabold tracking-tight theme-text-primary flex items-center gap-2">
                         3D ULPIN Engine
-                        <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30">SIH26011</span>
+                        <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30"></span>
                     </h1>
                     <p class="text-xs theme-text-muted font-medium">Bhu-Aadhaar 3D • ISO 19152 (LADM)</p>
                 </div>

@@ -7,6 +7,9 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
+BASE_PLOT_PATTERN = re.compile(r"^[A-Z0-9]{14}$")
+ULPIN_19_PATTERN = re.compile(r"^(?P<base>[A-Z0-9]{14})-(?P<tag>[AB][0-9]{3})$")
+
 @dataclass
 class SpatialCoordinates3D:
     min_x: float
@@ -61,12 +64,11 @@ def generate_19char_3d_ulpin(base_plot: str, floor_level: int) -> str:
       Basement -1 -> 12A34B56C78D90-B001
       Basement -2 -> 12A34B56C78D90-B002
     """
-    clean_base = re.sub(r"[^A-Za-z0-9]", "", base_plot).upper()
-    if len(clean_base) < 14:
-        # Pad deterministically to 14 alphanumeric characters
-        clean_base = clean_base.ljust(14, "0")
-    elif len(clean_base) > 14:
-        clean_base = clean_base[:14]
+    clean_base = base_plot.strip().upper()
+    if not BASE_PLOT_PATTERN.fullmatch(clean_base):
+        raise ValueError("base_plot must contain exactly 14 letters or digits")
+    if not isinstance(floor_level, int) or isinstance(floor_level, bool) or not -999 <= floor_level <= 999:
+        raise ValueError("floor_level must be an integer between -999 and 999")
 
     if floor_level >= 0:
         floor_tag = f"A{floor_level:03d}"
@@ -79,26 +81,34 @@ def generate_19char_3d_ulpin(base_plot: str, floor_level: int) -> str:
 def parse_19char_3d_ulpin(ulpin: str) -> Dict[str, Any]:
     """Parses a 19-character 3D ULPIN string into base plot and floor level."""
     cleaned = ulpin.strip().upper()
-    parts = cleaned.split("-")
-    if len(parts) != 2 or len(cleaned) != 19 or len(parts[0]) != 14 or len(parts[1]) != 4:
+    match = ULPIN_19_PATTERN.fullmatch(cleaned)
+    if not match:
         return {"valid": False, "error": "Invalid 19-character 3D ULPIN format"}
 
-    base_plot = parts[0]
-    tag = parts[1]
+    base_plot = match.group("base")
+    tag = match.group("tag")
     prefix = tag[0]
-    try:
-        level_num = int(tag[1:])
-        floor_level = level_num if prefix == "A" else -level_num
-        return {
-            "valid": True,
-            "base_plot": base_plot,
-            "floor_tag": tag,
-            "floor_level": floor_level,
-            "is_subsurface": prefix == "B",
-            "standard": "19-Char 3D Bhu-Aadhaar"
-        }
-    except ValueError:
-        return {"valid": False, "error": "Malformed floor digits in ULPIN"}
+    level_num = int(tag[1:])
+    floor_level = level_num if prefix == "A" else -level_num
+    return {
+        "valid": True,
+        "base_plot": base_plot,
+        "floor_tag": tag,
+        "floor_level": floor_level,
+        "is_subsurface": prefix == "B",
+        "standard": "19-Char 3D Bhu-Aadhaar"
+    }
+
+
+def format_extended_3d_ulpin(base_plot: str, floor_level: int, elevation_msl: float) -> str:
+    """Formats the elevation-aware representation alongside the 19-character ID."""
+    canonical = generate_19char_3d_ulpin(base_plot, floor_level)
+    elevation = int(round(elevation_msl))
+    if not -999 <= elevation <= 999:
+        raise ValueError("elevation_msl must round to a value between -999 and 999")
+    elevation_token = f"Z{elevation:03d}" if elevation >= 0 else f"ZN{abs(elevation):02d}"
+    floor_token = f"F{floor_level:03d}" if floor_level >= 0 else f"B{abs(floor_level):03d}"
+    return f"{canonical.rsplit('-', 1)[0]}-{floor_token}-{elevation_token}"
 
 
 def generate_3d_ulpin(

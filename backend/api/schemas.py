@@ -141,3 +141,39 @@ class NDRFRescueSummarySchema(BaseModel):
     total_occupants: int
     incident_commander_alert: str
     floors: List[NDRFFloorSummarySchema]
+# -------------------------------------------------------------------------
+# 3D ULPIN Encode / Decode Schemas
+# -------------------------------------------------------------------------
+
+class ULPINEncodeRequestSchema(BaseModel):
+    base_plot_id: str = Field(
+        ...,
+        description="14-character base cadastral plot ID"
+    )
+    floor_level: int = Field(
+        ...,
+        description="Floor level: 0=Ground, positive=Floor, negative=Basement"
+    )
+    elevation_msl: float = Field(
+        ...,
+        description="Elevation above mean sea level in meters"
+    )
+
+
+class ULPINEncodeResponseSchema(BaseModel):
+    canonical_ulpin: str
+    extended_3d_ulpin: str
+    base_plot_id: str
+    floor_level: int
+    elevation_msl: float
+    canonical_length: int
+
+
+class ULPINDecodeResponseSchema(BaseModel):
+    valid: bool
+    ulpin_3d: Optional[str] = None
+    base_plot_id: Optional[str] = None
+    floor_level: Optional[int] = None
+    floor_tag: Optional[str] = None
+    is_subsurface: Optional[bool] = None
+    error: Optional[str] = None
