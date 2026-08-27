@@ -232,26 +232,20 @@ async function init() {
                     // Center camera on the device location immediately
                     focusCesiumBuilding();
                     
-                    // Fetch exact footprint geometry for device location
+                    // Fetch exact footprint geometry for device location in background without distorting 3D CAD model shape
                     fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
                         lastRealOsmFootprint = geometry;
-                        const area = getPolygonArea(geometry);
-                        
-                        let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
-                        let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
                         const actualName = tags['name'] || tags['addr:housename'] || "Device Location Building";
-                        
-                        const polyDims = getPolygonBoundsInMeters(geometry);
-                        const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels, polyDims, tags);
-                        generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
-                        allParcelsData = generated;
-                        renderParcelsInCesium();
-                        if (generated.length > 0) {
-                            selectParcelByData(generated[0]);
+                        allParcelsData.forEach(p => {
+                            p.building_name = actualName;
+                            p.osm_tags = tags;
+                        });
+                        if (currentMapEngine === 'cesium') {
+                            renderParcelsInCesium();
                         }
                     }, () => {
-                        console.log("No OSM building footprint found at startup device location. Falling back to default cylinder.");
+                        console.log("No OSM building footprint found at startup device location.");
                     });
 
                     // Fetch address info via reverse geocoding
