@@ -884,14 +884,46 @@ async function runDemoStep(step) {
     } else if (step === 2) {
         // Step 2: Blueprint-to-3D Vision AI
         showToast("Step 2: Executing OpenCV Blueprint-to-3D Vision AI Extrusion...");
-        await triggerBlueprintVisionAI();
     } else if (step === 3) {
-        // Step 3: 19-Character 3D ULPIN
-        const targetMesh = parcelMeshes.find(m => m.userData.floor_level === 3) || parcelMeshes[0];
-        if (targetMesh) {
-            selectParcel(targetMesh);
-            showToast(`Step 3: Selected Floor 3 Unit with 19-Char 3D ULPIN: ${targetMesh.userData.ulpin_3d}`);
+    // Step 3: Generate 19-Character 3D ULPIN using FastAPI backend
+    try {
+        const basePlot = "12A34B56C78D90";
+        const floorLevel = 3;
+
+        const response = await fetch(
+            `http://127.0.0.1:8000/api/ulpin/generate?base_plot=${basePlot}&floor_level=${floorLevel}`
+        );
+
+        if (!response.ok) {
+            throw new Error(`Backend error: ${response.status}`);
         }
+
+        const data = await response.json();
+
+        // Display generated ULPIN on the page
+        const ulpinText = document.getElementById("ulpin-text");
+        if (ulpinText) {
+            ulpinText.innerText = data.ulpin_3d;
+        }
+
+        // Select Floor 3 parcel if available
+        const targetMesh =
+            parcelMeshes.find(m => m.userData.floor_level === 3) ||
+            parcelMeshes[0];
+
+        if (targetMesh) {
+            targetMesh.userData.ulpin_3d = data.ulpin_3d;
+            selectParcel(targetMesh);
+        }
+
+        showToast(
+            `Step 3: 19-Char 3D ULPIN generated: ${data.ulpin_3d}`
+        );
+
+    } catch (error) {
+        console.error("ULPIN backend error:", error);
+        showToast("Unable to connect to 3D ULPIN backend.");
+    }
     } else if (step === 4) {
         // Step 4: NDRF Emergency Disaster Rescue View
         if (!isNDRFRescueModeActive) toggleNDRFRescueMode();
