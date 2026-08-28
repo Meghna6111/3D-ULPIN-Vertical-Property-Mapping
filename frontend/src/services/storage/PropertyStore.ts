@@ -10,6 +10,7 @@
 import type { Parcel } from '@/types/property';
 
 const STORAGE_KEY = 'ulpin-properties';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
 
 /**
  * Safely read the property map from localStorage.
@@ -59,7 +60,7 @@ export function save(parcel: Parcel): void {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  fetch('http://localhost:8000/api/properties', {
+  fetch(`${API_BASE_URL}/api/properties`, {
     method: 'POST',
     headers,
     body: JSON.stringify(parcel),
@@ -93,7 +94,7 @@ export function remove(id: string): boolean {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  fetch(`http://localhost:8000/api/properties/${id}`, {
+  fetch(`${API_BASE_URL}/api/properties/${id}`, {
     method: 'DELETE',
     headers,
   }).catch(() => {
@@ -120,7 +121,7 @@ export async function sync(): Promise<Parcel[]> {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const res = await fetch('http://localhost:8000/api/properties', {
+    const res = await fetch(`${API_BASE_URL}/api/properties`, {
       headers,
       signal: AbortSignal.timeout(2000),
     });

@@ -7,7 +7,7 @@ import type {
 
 import { PropertyStore } from '../storage/PropertyStore';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
 
 export class BackendCadastralProvider implements ICadastralProvider {
   readonly id = 'backend-cadastral-v1';
