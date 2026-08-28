@@ -25,6 +25,7 @@ let selectedOsmFeature = null;
 let cesiumRotationAngle = 0;
 let cesiumFootprintShape = "auto";
 let currentOverpassFootprint = null;
+let lastRealOsmFootprint = null;
 
 let ANCHOR_LAT = 12.96945;
 let ANCHOR_LON = 77.5927;
@@ -231,25 +232,20 @@ async function init() {
                     // Center camera on the device location immediately
                     focusCesiumBuilding();
                     
-                    // Fetch exact footprint geometry for device location
+                    // Fetch exact footprint geometry for device location in background without distorting 3D CAD model shape
                     fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
-                        const area = getPolygonArea(geometry);
-                        
-                        let realLevels = parseInt(tags['building:levels'] || tags['levels']) || 5;
-                        let realHeight = parseFloat(tags['height'] || tags['building:height']) || (realLevels * 3.2);
+                        lastRealOsmFootprint = geometry;
                         const actualName = tags['name'] || tags['addr:housename'] || "Device Location Building";
-                        
-                        const polyDims = getPolygonBoundsInMeters(geometry);
-                        const generated = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, realHeight, actualName, realLevels, polyDims, tags);
-                        generated.forEach(p => { p.volume_m3 = Math.round(area * 3.2); });
-                        allParcelsData = generated;
-                        renderParcelsInCesium();
-                        if (generated.length > 0) {
-                            selectParcelByData(generated[0]);
+                        allParcelsData.forEach(p => {
+                            p.building_name = actualName;
+                            p.osm_tags = tags;
+                        });
+                        if (currentMapEngine === 'cesium') {
+                            renderParcelsInCesium();
                         }
                     }, () => {
-                        console.log("No OSM building footprint found at startup device location. Falling back to default cylinder.");
+                        console.log("No OSM building footprint found at startup device location.");
                     });
 
                     // Fetch address info via reverse geocoding
@@ -310,9 +306,30 @@ async function init() {
                 showToast("📍 Map updated to your device's exact location!");
             },
             (error) => {
-                console.warn("Geolocation access denied or timed out. Defaulting to Sree Kanteerava Stadium.", error);
+                console.warn("Browser Geolocation prompt denied or timed out. Fetching accurate IP geolocation fallback...", error);
+                fetch("https://ipapi.co/json/")
+                    .then(res => res.json())
+                    .then(ipData => {
+                        if (ipData && ipData.latitude && ipData.longitude) {
+                            ANCHOR_LAT = parseFloat(ipData.latitude);
+                            ANCHOR_LON = parseFloat(ipData.longitude);
+                            console.log(`Accurate IP Location detected: Lat ${ANCHOR_LAT}, Lon ${ANCHOR_LON} (${ipData.city}, ${ipData.region})`);
+                            setupCesiumAnchor();
+                            const bName = ipData.city ? `Building in ${ipData.city}` : "Device Location Building";
+                            const proceduralData = generate3DBuildingFloors(ANCHOR_LAT, ANCHOR_LON, 16.0, bName);
+                            allParcelsData = proceduralData;
+                            refreshParcelRendering();
+                            if (currentMapEngine === 'cesium' && cesiumViewer) {
+                                focusCesiumBuilding();
+                            }
+                            showToast(`📍 Location updated to ${ipData.city || 'your region'}!`);
+                        }
+                    })
+                    .catch(() => {
+                        console.warn("IP Geolocation fallback failed. Using default location.");
+                    });
             },
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     }
 
@@ -1544,6 +1561,25 @@ async function initCesium() {
         cesiumViewer.scene.globe.enableLighting = true;
         cesiumViewer.scene.globe.depthTestAgainstTerrain = cesiumIonToken ? true : false;
 
+        // Enhanced High-Precision 3D Globe Camera Navigation (Pan, Tilt, Smooth Zoom, Orbit)
+        const controller = cesiumViewer.scene.screenSpaceCameraController;
+        controller.enableLook = true;
+        controller.enableRotate = true;
+        controller.enableZoom = true;
+        controller.enableTilt = true;
+        controller.enableTranslate = true;
+        controller.inertiaSpin = 0.88;
+        controller.inertiaTranslate = 0.88;
+        controller.inertiaZoom = 0.88;
+        controller.minimumZoomDistance = 2.0;
+        controller.maximumZoomDistance = 60000.0;
+        controller.zoomEventTypes = [Cesium.CameraEventType.WHEEL, Cesium.CameraEventType.PINCH];
+        controller.tiltEventTypes = [
+            Cesium.CameraEventType.RIGHT_DRAG, 
+            Cesium.CameraEventType.PINCH, 
+            { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL }
+        ];
+
         isCesiumInitialized = true;
         
         if (ANCHOR_LAT !== 12.96945 || ANCHOR_LON !== 77.5927) {
@@ -1860,8 +1896,8 @@ function renderParcelsInCesium() {
             ];
         }
 
-        // Use currentOverpassFootprint ONLY when footprint shape mode is set to 'auto'
-        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
+        // Always use currentOverpassFootprint when available (real OSM or synthetic shape)
+        if (currentOverpassFootprint) {
             const lats = currentOverpassFootprint.map(c => c.lat);
             const lons = currentOverpassFootprint.map(c => c.lon);
             const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
@@ -1923,23 +1959,30 @@ function renderParcelsInCesium() {
         });
         cesiumEntities.push(cageEntity);
 
-        // Center label for the whole building inside the cage
-        const centerLabelEntity = cesiumViewer.entities.add({
-            id: 'building-center-label',
-            position: centerPosition,
-            label: {
-                text: buildingName,
-                font: 'bold 12px Inter, sans-serif',
-                fillColor: Cesium.Color.WHITE,
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 4.0,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-                disableDepthTestDistance: Number.POSITIVE_INFINITY
-            }
-        });
-        cesiumEntities.push(centerLabelEntity);
+        // High-contrast 3D Place & Building Title Pill Label
+        if (isCesiumLabelsVisible) {
+            const displayAddressText = currentGeocodedAddress ? (currentGeocodedAddress.length > 40 ? currentGeocodedAddress.substring(0, 40) + '...' : currentGeocodedAddress) : "Verified GIS Parcel";
+            const centerLabelEntity = cesiumViewer.entities.add({
+                id: 'building-center-label',
+                position: centerPosition,
+                label: {
+                    text: `🏢 ${buildingName.toUpperCase()}\n📍 ${displayAddressText}`,
+                    font: 'bold 13px Inter, system-ui, sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.fromCssColorString('#0284c7'),
+                    outlineWidth: 3.0,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    showBackground: true,
+                    backgroundColor: Cesium.Color.fromCssColorString('#0f172a').withAlpha(0.90),
+                    backgroundPadding: new Cesium.Cartesian2(12, 7),
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                    scaleByDistance: new Cesium.NearFarScalar(40.0, 1.15, 3000.0, 0.60)
+                }
+            });
+            cesiumEntities.push(centerLabelEntity);
+        }
     }
 
     // 2. Render individual floors
@@ -2018,7 +2061,7 @@ function renderParcelsInCesium() {
         const finalColor = isSelected ? Cesium.Color.CYAN.withAlpha(0.85) : color;
 
         let hierarchy;
-        if (currentOverpassFootprint && cesiumFootprintShape === 'auto') {
+        if (currentOverpassFootprint) {
             if (cesiumRotationAngle !== 0) {
                 const lats = currentOverpassFootprint.map(c => c.lat);
                 const lons = currentOverpassFootprint.map(c => c.lon);
@@ -2118,83 +2161,80 @@ function getEstimatedShape(name) {
 }
 
 function fetchBuildingFootprint(lat, lon, successCallback, fallbackCallback) {
-    const proxyUrl = `${API_BASE}/proxy/overpass?lat=${lat}&lon=${lon}`;
-    const directUrl = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:50,${lat},${lon})[building];out geom;`;
+    const overpassQuery = `[out:json];(way(around:100,${lat},${lon})[building];way(around:100,${lat},${lon})["building:part"];way(around:100,${lat},${lon})[amenity];relation(around:100,${lat},${lon})[building];);out geom;`;
     
-    fetch(proxyUrl)
-        .then(res => {
-            if (!res.ok) throw new Error("Proxy failed");
-            return res.json();
-        })
-        .then(data => {
-            if (data && data.elements && data.elements.length > 0) {
-                let closestElement = null;
-                let minDistance = Infinity;
-                
-                data.elements.forEach(el => {
-                    if (el.geometry && el.geometry.length > 2) {
-                        let sumLat = 0, sumLon = 0;
-                        el.geometry.forEach(pt => {
-                            sumLat += pt.lat;
-                            sumLon += pt.lon;
-                        });
-                        const centLat = sumLat / el.geometry.length;
-                        const centLon = sumLon / el.geometry.length;
-                        
-                        const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
-                        if (dist < minDistance) {
-                            minDistance = dist;
-                            closestElement = el;
-                        }
-                    }
+    const urls = [
+        `${API_BASE}/proxy/overpass?lat=${lat}&lon=${lon}`,
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`,
+        `https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(overpassQuery)}`,
+        `https://overpass.private.coffee/api/interpreter?data=${encodeURIComponent(overpassQuery)}`
+    ];
+
+    function processElements(elements) {
+        if (!elements || elements.length === 0) return false;
+        
+        let closestElement = null;
+        let minDistance = Infinity;
+
+        elements.forEach(el => {
+            let pts = el.geometry;
+            if (!pts && el.members) {
+                // Flatten relation member geometries
+                pts = [];
+                el.members.forEach(m => {
+                    if (m.geometry) pts.push(...m.geometry);
                 });
+            }
+            
+            if (pts && pts.length > 2) {
+                let sumLat = 0, sumLon = 0;
+                pts.forEach(pt => {
+                    sumLat += pt.lat;
+                    sumLon += pt.lon;
+                });
+                const centLat = sumLat / pts.length;
+                const centLon = sumLon / pts.length;
                 
-                if (closestElement) {
-                    successCallback(closestElement.geometry, closestElement.tags || {});
-                    return;
+                const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestElement = { geometry: pts, tags: el.tags || {} };
                 }
             }
-            throw new Error("No building found via proxy");
-        })
-        .catch(err => {
-            console.warn("Proxy Overpass failed, trying direct OpenStreetMap fetch:", err);
-            fetch(directUrl)
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.elements && data.elements.length > 0) {
-                        let closestElement = null;
-                        let minDistance = Infinity;
-                        
-                        data.elements.forEach(el => {
-                            if (el.geometry && el.geometry.length > 2) {
-                                let sumLat = 0, sumLon = 0;
-                                el.geometry.forEach(pt => {
-                                    sumLat += pt.lat;
-                                    sumLon += pt.lon;
-                                });
-                                const centLat = sumLat / el.geometry.length;
-                                const centLon = sumLon / el.geometry.length;
-                                
-                                const dist = Math.sqrt(Math.pow(centLat - lat, 2) + Math.pow(centLon - lon, 2));
-                                if (dist < minDistance) {
-                                    minDistance = dist;
-                                    closestElement = el;
-                                }
-                            }
-                        });
-                        
-                        if (closestElement) {
-                            successCallback(closestElement.geometry, closestElement.tags || {});
-                            return;
-                        }
-                    }
-                    fallbackCallback();
-                })
-                .catch(directErr => {
-                    console.warn("Direct Overpass API failed:", directErr);
-                    fallbackCallback();
-                });
         });
+
+        if (closestElement) {
+            successCallback(closestElement.geometry, closestElement.tags);
+            return true;
+        }
+        return false;
+    }
+
+    function tryFetch(index) {
+        if (index >= urls.length) {
+            console.warn("All Overpass footprint endpoints failed. Calling fallback callback.");
+            fallbackCallback();
+            return;
+        }
+
+        fetch(urls[index])
+            .then(res => {
+                if (!res.ok) throw new Error(`Endpoint ${index} HTTP error ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                const elements = data && data.elements;
+                if (!processElements(elements)) {
+                    tryFetch(index + 1);
+                }
+            })
+            .catch(err => {
+                console.warn(`Overpass endpoint ${index} failed:`, err);
+                tryFetch(index + 1);
+            });
+    }
+
+    tryFetch(0);
 }
 
 function getPolygonArea(coords) {
@@ -2220,10 +2260,53 @@ function getPolygonArea(coords) {
     return Math.abs(area / 2);
 }
 
+let isCesiumLabelsVisible = true;
+let isCesiumOrbiting = false;
+let orbitTickListener = null;
+
+window.toggleCesiumLabels = function() {
+    isCesiumLabelsVisible = !isCesiumLabelsVisible;
+    const btn = document.getElementById("btn-toggle-labels");
+    if (btn) btn.innerText = isCesiumLabelsVisible ? "🏷️ Labels On" : "🏷️ Labels Off";
+    renderParcelsInCesium();
+    showToast(isCesiumLabelsVisible ? "🏷️ 3D Building & Place Labels Enabled" : "🏷️ Labels Hidden");
+};
+
+window.toggleCesiumOrbitTour = function() {
+    if (!cesiumViewer || !isCesiumInitialized) return;
+    isCesiumOrbiting = !isCesiumOrbiting;
+    const btn = document.getElementById("btn-orbit-tour");
+    if (btn) btn.innerText = isCesiumOrbiting ? "⏸️ Stop Tour" : "🔄 360° Tour";
+    
+    if (isCesiumOrbiting) {
+        let angle = 0;
+        orbitTickListener = cesiumViewer.clock.onTick.addEventListener(() => {
+            if (!isCesiumOrbiting) return;
+            angle += 0.005;
+            const distance = 95.0;
+            const heading = Cesium.Math.toRadians(angle * 50);
+            const pitch = Cesium.Math.toRadians(-28);
+            
+            const offset = new Cesium.HeadingPitchRange(heading, pitch, distance);
+            const center = localToGlobal(0, 0, 10);
+            cesiumViewer.camera.lookAt(center, offset);
+        });
+        showToast("🎥 360° Cinematic Orbit Tour Started!");
+    } else {
+        if (orbitTickListener) {
+            orbitTickListener();
+            orbitTickListener = null;
+        }
+        cesiumViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+        showToast("⏹️ Tour Paused");
+    }
+};
+
 function setupCesiumInteraction() {
     if (!cesiumViewer) return;
 
     cesiumMouseHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+    const tooltip = document.getElementById("cesium-hover-tooltip");
 
     cesiumMouseHandler.setInputAction(function (movement) {
         const pickedObject = cesiumViewer.scene.pick(movement.endPosition);
@@ -2232,6 +2315,7 @@ function setupCesiumInteraction() {
                 const entity = pickedObject.id;
                 if (entity.id === 'cesium-base-parcel') {
                     resetCesiumHovered();
+                    if (tooltip) tooltip.classList.add("hidden");
                     return;
                 }
 
@@ -2245,13 +2329,49 @@ function setupCesiumInteraction() {
                     }
                     document.body.style.cursor = "pointer";
                 }
+
+                // Display dynamic floating hover card tooltip
+                if (tooltip && entity.properties) {
+                    const p = entity.properties;
+                    tooltip.style.left = `${movement.endPosition.x + 15}px`;
+                    tooltip.style.top = `${movement.endPosition.y - 15}px`;
+                    tooltip.classList.remove("hidden");
+
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerText = val;
+                    };
+                    setVal("tooltip-title", p.building_name || "3D Volumetric Strata");
+                    setVal("tooltip-ulpin", p.ulpin_3d || "IN-ULPIN-3D");
+                    setVal("tooltip-floor", p.floor_level < 0 ? `B${p.floor_level}` : `FL-${p.floor_level}`);
+                    setVal("tooltip-vol", `${p.volume_m3 || 120} m³`);
+                    setVal("tooltip-occ", p.total_occupants || 2);
+                    setVal("tooltip-status", p.encumbrance_status || "Verified");
+                }
             } else if (pickedObject instanceof Cesium.Cesium3DTileFeature || pickedObject.getProperty) {
-                // Hovering over real city 3D building
                 document.body.style.cursor = "pointer";
+                if (tooltip) {
+                    const bName = getFriendlyBuildingName(pickedObject);
+                    tooltip.style.left = `${movement.endPosition.x + 15}px`;
+                    tooltip.style.top = `${movement.endPosition.y - 15}px`;
+                    tooltip.classList.remove("hidden");
+
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerText = val;
+                    };
+                    setVal("tooltip-title", bName);
+                    setVal("tooltip-ulpin", "OSM-3D-FEATURE");
+                    setVal("tooltip-floor", "Multi-Level");
+                    setVal("tooltip-vol", "OSM Footprint");
+                    setVal("tooltip-occ", "Public/Commercial");
+                    setVal("tooltip-status", "Real GIS Tile");
+                }
             }
         } else {
             resetCesiumHovered();
             document.body.style.cursor = "default";
+            if (tooltip) tooltip.classList.add("hidden");
         }
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
@@ -2298,6 +2418,7 @@ function setupCesiumInteraction() {
                     setupCesiumAnchor();
                     
                     currentOverpassFootprint = null;
+                    lastRealOsmFootprint = null;
                     
                     const bName = getFriendlyBuildingName(pickedObject);
                     let bHeight = pickedObject.getProperty('height');
@@ -2331,6 +2452,7 @@ function setupCesiumInteraction() {
                     // 1. Fetch exact footprint geometry from OpenStreetMap Overpass API
                     fetchBuildingFootprint(lat, lon, (geometry, tags) => {
                         currentOverpassFootprint = geometry;
+                        lastRealOsmFootprint = geometry;
                         const area = getPolygonArea(geometry);
                         
                         // Set shape to auto to reflect real OSM footprint polygon
@@ -2565,66 +2687,132 @@ function generate3DBuildingFloors(lat, lon, heightMeters, name, explicitFloors =
         realPropertyType = "Commercial Office (OSM Data)";
     }
 
-    const realOperator = osmTags.operator || osmTags.brand || osmTags.owner || osmTags['addr:housenumber'] 
-        ? (`Occupant/Owner - ${osmTags.operator || osmTags.brand || osmTags.owner || ('No. ' + osmTags['addr:housenumber'])}`)
-        : "Verified GIS Parcel Occupant";
-
     const street = osmTags['addr:street'] || osmTags['addr:full'] || currentGeocodedAddress || "Verified Real Coordinates";
     const houseNum = osmTags['addr:housenumber'] || "";
     const displayAddr = houseNum ? `${houseNum}, ${street}` : street;
+    
+    const latCode = Math.abs(lat).toFixed(4).replace('.', '');
+    const lonCode = Math.abs(lon).toFixed(4).replace('.', '');
+
+    // 1. Add Basement-02 (Subsurface Metro Infrastructure - Wide Podium Base)
+    generatedParcels.push({
+        id: `b2-metro-${latCode}-${lonCode}`,
+        ulpin_3d: `IN-ULPIN-${latCode}-${lonCode}-B002`,
+        building_name: name,
+        base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+        base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+        state_code: "REAL-GIS",
+        district_code: "OSM",
+        floor_level: -2,
+        unit_label: `${name} - Basement-02 (Subsurface Metro)`,
+        owner_name: "Municipal Transport Authority",
+        property_type: "Subsurface Public Infrastructure",
+        volume_m3: Math.round((w + 2.0) * (d + 2.0) * 3.2),
+        bounds: { min_x: -(w/2.0 + 1.0), max_x: (w/2.0 + 1.0), min_y: -(d/2.0 + 1.0), max_y: (d/2.0 + 1.0), min_z: -6.4, max_z: -3.2 },
+        seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
+        electricity_kwh: 1200.0, water_liters: 25000.0,
+        is_vulnerable_for_rescue: false,
+        encumbrance_status: "Verified Real GIS Property",
+        metadata_json: { depth_class: "Deep Underground", easement_type: "Subsurface Transport" },
+        created_at: Date.now() / 1000
+    });
+
+    // 2. Add Basement-01 (Subsurface Utility Vault - Podium Base)
+    generatedParcels.push({
+        id: `b1-parking-${latCode}-${lonCode}`,
+        ulpin_3d: `IN-ULPIN-${latCode}-${lonCode}-B001`,
+        building_name: name,
+        base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+        base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+        state_code: "REAL-GIS",
+        district_code: "OSM",
+        floor_level: -1,
+        unit_label: `${name} - Basement-01 (Subsurface Parking)`,
+        owner_name: "Strata Property Association",
+        property_type: "Subsurface Utility Vault",
+        volume_m3: Math.round((w + 1.0) * (d + 1.0) * 3.2),
+        bounds: { min_x: -(w/2.0 + 0.5), max_x: (w/2.0 + 0.5), min_y: -(d/2.0 + 0.5), max_y: (d/2.0 + 0.5), min_z: -3.2, max_z: 0.0 },
+        seniors_60plus: 0, adults: 2, infants_kids: 0, total_occupants: 2,
+        electricity_kwh: 650.0, water_liters: 8000.0,
+        is_vulnerable_for_rescue: false,
+        encumbrance_status: "Verified Real GIS Property",
+        metadata_json: { depth_class: "Shallow Underground", easement_type: "Common Amenity" },
+        created_at: Date.now() / 1000
+    });
+
+    // 3. Add 2x2 Subdivided Volumetric Units for Each Above-Ground Floor Level
+    const unitW = (w - 0.4) / 2.0;
+    const unitD = (d - 0.4) / 2.0;
+    const gap = 0.4;
 
     for (let i = 0; i < numFloors; i++) {
         const floorNum = i + 1;
         const minZ = i * 3.2;
         const maxZ = (i + 1) * 3.2;
-        const volume = Math.round(w * d * 3.2);
-        
-        const latCode = Math.abs(lat).toFixed(4).replace('.', '');
-        const lonCode = Math.abs(lon).toFixed(4).replace('.', '');
-        const ulpin = `IN-ULPIN-${latCode}-${lonCode}-FL${floorNum.toString().padStart(2, '0')}`;
-        const floorLabel = floorNum === 1 ? "Ground Floor (L1)" : `Level ${floorNum} (FL-${floorNum})`;
 
-        generatedParcels.push({
-            id: `osm-real-floor-${floorNum}-${latCode}-${lonCode}`,
-            ulpin_3d: ulpin,
-            base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
-            base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
-            state_code: "REAL-GIS",
-            district_code: "OSM",
-            floor_level: floorNum,
-            building_name: name,
-            geocoded_address: displayAddr,
-            unit_label: `${name} - ${floorLabel}`,
-            owner_name: realOperator,
-            property_type: realPropertyType,
-            volume_m3: volume,
-            bounds: {
-                min_x: -w / 2.0,
-                max_x: w / 2.0,
-                min_y: -d / 2.0,
-                max_y: d / 2.0,
-                min_z: minZ,
-                max_z: maxZ
-            },
-            seniors_60plus: 0,
-            adults: 2,
-            infants_kids: 0,
-            total_occupants: 2,
-            electricity_kwh: Math.round(volume * 0.8),
-            water_liters: Math.round(volume * 12.0),
-            declared_floors: numFloors,
-            actual_floors: numFloors,
-            osm_tags: osmTags,
-            metadata_json: { 
-                latitude: lat, 
-                longitude: lon, 
-                osm_levels: osmTags['building:levels'] || numFloors,
-                osm_height: heightMeters,
-                data_source: "Live OpenStreetMap & Overpass GIS"
-            },
-            encumbrance_status: "Verified Real GIS Property",
-            created_at: Date.now() / 1000
-        });
+        for (let ux = 0; ux < 2; ux++) {
+            for (let uy = 0; uy < 2; uy++) {
+                const minX = -w / 2.0 + ux * (unitW + gap);
+                const maxX = minX + unitW;
+                const minY = -d / 2.0 + uy * (unitD + gap);
+                const maxY = minY + unitD;
+
+                const unitNo = floorNum * 100 + (ux * 2 + uy + 1);
+                const ulpin = `IN-ULPIN-${latCode}-${lonCode}-FL${floorNum.toString().padStart(2, '0')}-U0${ux * 2 + uy + 1}`;
+
+                let seniors = 0;
+                let kids = 0;
+                let adults = 2;
+                if (floorNum === 4 && ux === 0 && uy === 0) {
+                    seniors = 2;
+                } else if (floorNum === 4 && ux === 1 && uy === 1) {
+                    kids = 4;
+                } else if (floorNum === 2 && ux === 1 && uy === 0) {
+                    seniors = 1; kids = 2;
+                }
+
+                generatedParcels.push({
+                    id: `unit-${unitNo}-${latCode}-${lonCode}`,
+                    ulpin_3d: ulpin,
+                    base_survey_no: `SY-OSM-${latCode.substring(0, 4)}`,
+                    base_plot_id: `PLOT-GIS-${lonCode.substring(0, 4)}`,
+                    state_code: "REAL-GIS",
+                    district_code: "OSM",
+                    floor_level: floorNum,
+                    building_name: name,
+                    geocoded_address: displayAddr,
+                    unit_label: `${name} - Level ${floorNum} (FL-${floorNum})`,
+                    owner_name: `Verified GIS Occupant (Unit ${unitNo})`,
+                    property_type: realPropertyType,
+                    volume_m3: Math.round(unitW * unitD * 3.2),
+                    bounds: {
+                        min_x: minX,
+                        max_x: maxX,
+                        min_y: minY,
+                        max_y: maxY,
+                        min_z: minZ,
+                        max_z: maxZ
+                    },
+                    seniors_60plus: seniors,
+                    adults: adults,
+                    infants_kids: kids,
+                    total_occupants: (seniors + adults + kids),
+                    electricity_kwh: Math.round(unitW * unitD * 8.0),
+                    water_liters: Math.round(unitW * unitD * 120.0),
+                    declared_floors: numFloors,
+                    actual_floors: numFloors,
+                    osm_tags: osmTags,
+                    metadata_json: { 
+                        latitude: lat, 
+                        longitude: lon, 
+                        unit_number: unitNo,
+                        data_source: "Live OpenStreetMap & Overpass GIS"
+                    },
+                    encumbrance_status: "Verified Real GIS Property",
+                    created_at: Date.now() / 1000
+                });
+            }
+        }
     }
     
     return generatedParcels;
@@ -2656,15 +2844,33 @@ function updateCesiumFootprintShape(shape) {
     const d = firstParcel ? (firstParcel.bounds.max_y - firstParcel.bounds.min_y) : 24.0;
     
     if (shape !== 'auto') {
+        // Manual shape selected — generate synthetic footprint polygon for the chosen shape
         currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, shape, w, d);
+        renderParcelsInCesium();
+        showToast(`📐 3D Building morphed to: ${shape.toUpperCase()}`);
     } else {
-        const bName = firstParcel ? firstParcel.building_name : "Interactive 3D Building";
-        const estimated = getEstimatedShape(bName);
-        currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, estimated, w, d);
+        // Auto mode — re-fetch real building footprint from OpenStreetMap
+        if (lastRealOsmFootprint) {
+            currentOverpassFootprint = lastRealOsmFootprint;
+            renderParcelsInCesium();
+            showToast('🌍 Restored real OSM building footprint');
+        } else {
+            // Fetch fresh from Overpass
+            fetchBuildingFootprint(ANCHOR_LAT, ANCHOR_LON, (geometry, tags) => {
+                currentOverpassFootprint = geometry;
+                lastRealOsmFootprint = geometry;
+                renderParcelsInCesium();
+                showToast('🌍 Real OSM building footprint loaded');
+            }, () => {
+                // Fallback to estimated shape
+                const bName = firstParcel ? firstParcel.building_name : "Interactive 3D Building";
+                const estimated = getEstimatedShape(bName);
+                currentOverpassFootprint = createSyntheticFootprint(ANCHOR_LAT, ANCHOR_LON, estimated, w, d);
+                renderParcelsInCesium();
+                showToast('📐 Auto-estimated building shape applied');
+            });
+        }
     }
-    
-    renderParcelsInCesium();
-    showToast(`📐 3D Building footprint shape morphing to: ${shape.toUpperCase()}`);
 }
 window.updateCesiumFootprintShape = updateCesiumFootprintShape;
 
@@ -2732,14 +2938,36 @@ function setCesiumCameraAngle(angleType) {
 
     if (angleType === 'top') {
         smoothCesiumFlyTo({
-            destination: localToGlobal(0, 0, 80),
+            destination: localToGlobal(0, 0, 110),
             orientation: {
                 heading: Cesium.Math.toRadians(0),
                 pitch: Cesium.Math.toRadians(-90),
                 roll: 0.0
             },
-            duration: 1.0
+            duration: 1.2
         });
+    } else if (angleType === 'street') {
+        smoothCesiumFlyTo({
+            destination: localToGlobal(32, -40, 6),
+            orientation: {
+                heading: Cesium.Math.toRadians(325),
+                pitch: Cesium.Math.toRadians(-8),
+                roll: 0.0
+            },
+            duration: 1.2
+        });
+        showToast("🦅 Switched to Street Level View");
+    } else if (angleType === 'iso') {
+        smoothCesiumFlyTo({
+            destination: localToGlobal(45, -45, 55),
+            orientation: {
+                heading: Cesium.Math.toRadians(315),
+                pitch: Cesium.Math.toRadians(-45),
+                roll: 0.0
+            },
+            duration: 1.2
+        });
+        showToast("📐 Switched to 45° Architectural View");
     } else if (angleType === '3d') {
         smoothCesiumFlyTo({
             destination: localToGlobal(20, -25, 30),
@@ -2970,7 +3198,11 @@ function printTitleCertificate() {
                 <div class="row"><span class="label">Encumbrance & Rights Status:</span><span class="value" style="color: #047857;">${document.getElementById("encumbrance-status")?.innerText || "Clear / Certified Freehold"}</span></div>
             </div>
             <div class="footer">
+<<<<<<< HEAD
                 <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine ()</p>
+=======
+                <p>Official Government Digital Cadastre Record • Generated via 3D ULPIN Engine</p>
+>>>>>>> origin/main
             </div>
         </body>
         </html>

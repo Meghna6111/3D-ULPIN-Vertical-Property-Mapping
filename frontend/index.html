@@ -52,7 +52,9 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>3D ULPIN Spatial Engine ()</title>
+    <title>3D ULPIN Spatial Engine</title>
     
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -282,7 +284,10 @@ body {
                 <div>
                     <h1 class="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                         3D ULPIN Spatial Engine
+<<<<<<< HEAD
                         <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30"></span>
+=======
+>>>>>>> origin/main
                     </h1>
                     <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Bhu-Aadhaar 3D • ISO 19152 (LADM) • DoLR</p>
                 </div>
@@ -292,9 +297,6 @@ body {
                 <button type="button" onclick="toggleThemeMode()" id="landing-theme-toggle" class="btn-ui px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 flex items-center gap-2 transition shadow-sm">
                     <span id="landing-theme-icon">☀️</span> <span id="landing-theme-label">Light Mode</span>
                 </button>
-                <a href="/docs" target="_blank" class="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm transition">
-                    API Docs (/docs)
-                </a>
                 <button type="button" onclick="launchGisDashboard()" class="btn-ui btn-primary px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
                     Launch 3D GIS Dashboard →
                 </button>
@@ -303,10 +305,13 @@ body {
 
         <!-- Landing Hero Body -->
         <main class="max-w-6xl mx-auto w-full px-6 py-12 text-center flex-1 flex flex-col items-center justify-center">
+<<<<<<< HEAD
             <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold mb-6 shadow-sm">
                 <span class="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-ping"></span>
                  Winner Prototype • ISO 19152 (LADM) Compliant
             </div>
+=======
+>>>>>>> origin/main
 
             <h2 class="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl leading-[1.15]">
                 Next-Gen 3D Cadastre & <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-sky-600 to-emerald-600 dark:from-indigo-400 dark:via-sky-300 dark:to-emerald-400">Volumetric Property</span> Mapping
@@ -370,7 +375,11 @@ body {
 
         <!-- Landing Footer -->
         <footer class="max-w-7xl mx-auto w-full px-6 py-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs theme-text-muted font-medium gap-3">
+<<<<<<< HEAD
             <div>© 2026  3D Cadastre Prototype • ISO 19152 (LADM) • Department of Land Resources</div>
+=======
+            <div>© 2026 3D Cadastre System • ISO 19152 (LADM) • Department of Land Resources</div>
+>>>>>>> origin/main
             <div class="flex items-center space-x-4">
                 <span class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Backend API Connected</span>
                 <span>FastAPI + PostGIS + CesiumJS</span>
@@ -400,7 +409,10 @@ body {
                 <div>
                     <h1 class="text-base font-extrabold tracking-tight theme-text-primary flex items-center gap-2">
                         3D ULPIN Engine
+<<<<<<< HEAD
                         <span class="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono border border-indigo-500/30"></span>
+=======
+>>>>>>> origin/main
                     </h1>
                     <p class="text-xs theme-text-muted font-medium">Bhu-Aadhaar 3D • ISO 19152 (LADM)</p>
                 </div>
@@ -1009,16 +1021,25 @@ Carpet Area: 85.40 sqm, Clear Title.</textarea>
         <div id="cesium-controls-body" class="space-y-4">
             <!-- GIS Camera Controls -->
             <div class="space-y-2">
-                <div class="text-[10px] uppercase font-extrabold theme-text-muted tracking-wider">Camera Presets</div>
-                <div class="grid grid-cols-3 gap-2 mb-2">
-                    <button type="button" onclick="focusCesiumBuilding()" class="btn-ui bg-indigo-50 dark:bg-indigo-950/90 border border-indigo-200 dark:border-indigo-500/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-200 font-bold py-2 px-2 rounded-xl text-[10px] shadow-sm">
-                        🏠 Home View
+                <div class="text-[10px] uppercase font-extrabold theme-text-muted tracking-wider">3D Camera Presets & Orbit</div>
+                <div class="grid grid-cols-3 gap-1.5 mb-2">
+                    <button type="button" onclick="focusCesiumBuilding()" class="btn-ui bg-indigo-50 dark:bg-indigo-950/90 border border-indigo-200 dark:border-indigo-500/50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-200 font-bold py-2 px-1.5 rounded-xl text-[10px] shadow-sm">
+                        🏠 Overview
                     </button>
-                    <button type="button" onclick="setCesiumCameraAngle('top')" class="btn-ui bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700/80 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold py-2 px-2 rounded-xl text-[10px]">
-                        🗺️ Top View
+                    <button type="button" onclick="setCesiumCameraAngle('top')" class="btn-ui bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700/80 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold py-2 px-1.5 rounded-xl text-[10px]">
+                        🗺️ Top-Down
                     </button>
-                    <button type="button" onclick="setCesiumCameraAngle('3d')" class="btn-ui bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700/80 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold py-2 px-2 rounded-xl text-[10px]">
-                        📐 3D Angle
+                    <button type="button" onclick="setCesiumCameraAngle('street')" class="btn-ui bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700/80 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold py-2 px-1.5 rounded-xl text-[10px]">
+                        🦅 Street Level
+                    </button>
+                    <button type="button" onclick="setCesiumCameraAngle('iso')" class="btn-ui bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700/80 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold py-2 px-1.5 rounded-xl text-[10px]">
+                        📐 45° Iso
+                    </button>
+                    <button type="button" onclick="toggleCesiumOrbitTour()" id="btn-orbit-tour" class="btn-ui bg-purple-50 dark:bg-purple-950/90 border border-purple-200 dark:border-purple-500/50 hover:bg-purple-100 text-purple-700 dark:text-purple-200 font-bold py-2 px-1.5 rounded-xl text-[10px] shadow-sm">
+                        🔄 360° Tour
+                    </button>
+                    <button type="button" onclick="toggleCesiumLabels()" id="btn-toggle-labels" class="btn-ui bg-amber-50 dark:bg-amber-950/90 border border-amber-200 dark:border-amber-500/50 hover:bg-amber-100 text-amber-700 dark:text-amber-200 font-bold py-2 px-1.5 rounded-xl text-[10px] shadow-sm">
+                        🏷️ Labels On
                     </button>
                 </div>
                 <button type="button" onclick="syncMapToGPS()" class="w-full btn-ui bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-extrabold py-2.5 px-3 rounded-xl text-[11px] shadow-sm flex items-center justify-center gap-2 transition duration-200">
@@ -1096,6 +1117,23 @@ Carpet Area: 85.40 sqm, Clear Title.</textarea>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Dynamic Floating 3D GIS Hover Tooltip Card -->
+    <div id="cesium-hover-tooltip" class="pointer-events-none fixed z-50 hidden transform -translate-x-1/2 -translate-y-full mb-3 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md border border-cyan-500/40 text-white rounded-xl p-3 shadow-2xl transition-opacity duration-150 max-w-xs">
+        <div class="flex items-center gap-2 mb-1 border-b border-slate-700/60 pb-1.5">
+            <span class="text-base">🏢</span>
+            <div>
+                <div id="tooltip-title" class="text-xs font-bold text-cyan-300 truncate max-w-[180px]">Building Name</div>
+                <div id="tooltip-ulpin" class="text-[9px] font-mono text-emerald-400 font-extrabold">IN-ULPIN-3D</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-300">
+            <div>Strata: <span id="tooltip-floor" class="font-bold text-white">FL-1</span></div>
+            <div>Volume: <span id="tooltip-vol" class="font-bold text-white">120 m³</span></div>
+            <div>Occupants: <span id="tooltip-occ" class="font-bold text-white">2</span></div>
+            <div>Status: <span id="tooltip-status" class="font-bold text-emerald-400">Verified</span></div>
         </div>
     </div>
 
