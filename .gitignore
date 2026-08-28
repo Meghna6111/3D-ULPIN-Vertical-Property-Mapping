@@ -1,10 +1,69 @@
-venv/
-backend/venv/
-__pycache__/
-*.pyc
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# Production / Build Output
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+build/
+out/
+*.tsbuildinfo
+
+# Logs & Debug
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment & Local Configuration
 .env
-*.prn
-*.db
-.pytest_cache/
-.firebase/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# Editor & IDE Directories
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# Cache Directories
+.eslintcache
+.stylelintcache
+.cache/
+.temp/
+tmp/
+
+# Python cache & local db
+__pycache__/
+*.py[cod]
+*$py.class
+*.db

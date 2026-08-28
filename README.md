@@ -1,183 +1,211 @@
-# 3D ULPIN Generation & Vertical Property Mapping System
+# 3D ULPIN & Vertical Property Mapping System (SIH26011)
 
-[![Firebase Hosting](https://img.shields.io/badge/Hosting-Firebase-orange.svg?style=flat-square&logo=firebase)](https://propertymap-system.web.app)
-[![Tech Stack](https://img.shields.io/badge/Stack-Python%20%7C%20FastAPI%20%7C%20CesiumJS%20%7C%20PostGIS-blue.svg?style=flat-square)](#)
-[![Deployment](https://img.shields.io/badge/Deploy-Live-success.svg?style=flat-square)](https://propertymap-system.web.app)
+[![Vite](https://img.shields.io/badge/Vite-5.4+-646CFF.svg?logo=vite&logoColor=white)](https://vitejs.dev)
+[![React](https://img.shields.io/badge/React-18.3+-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![CesiumJS](https://img.shields.io/badge/CesiumJS-3D%20GIS-139FCB.svg?logo=cesium&logoColor=white)](https://cesium.com)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4+-06B6D4.svg?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Tests](https://img.shields.io/badge/Tests-11%2F11%20Passed-10B981.svg)](https://nodejs.org)
 
-> **** — An integrated, high-fidelity 3D spatial cadastre system that generates unique 3D Unified Land Parcel Identification Numbers (ULPINs), maps vertical properties, and detects zoning and boundary overlaps using PostGIS.
-
-### 🌐 Live Production Application
-The frontend GIS interface is fully deployed and accessible at:
-👉 **[https://propertymap-system.web.app](https://propertymap-system.web.app)**
-
----
-
-## 1. Project Goals & Objectives
-
-This system is a working prototype of a **3D Cadastral & Vertical Property Management System** designed to:
-1. **Dynamic 3D GIS Visualization**: Render land parcels and building structures in 3D using CesiumJS.
-2. **Vertical Floor Segmentation**: Segment volumetric buildings into distinct, interactive floors/vertical property units.
-3. **Unique 3D ULPIN Encoding**: Generate standardized, unique 3D ULPINs for vertical strata (e.g., `ParcelID-F00X-Z404`).
-4. **Blueprint to 3D Generation**: Process uploaded architectural 2D floor plans into basic 3D structures using OpenCV contours.
-5. **Property Document OCR**: Extract owner names, floor area, and deed details from uploaded files using Tesseract OCR.
-6. **PostGIS Spatial Dispute Detection**: Check for boundary violations and overlaps against roads or neighboring parcels.
-7. **Volumetric Property Tax Calculator**: Calculate dynamic property taxes based on volumetric dimensions and zones.
-8. **QR Property Passports**: Generate a unique digital identity pass with embedded QR code details for easy verification.
-9. **Resident Demographics**: Display floor-level population data, including vulnerable demographics (children and senior citizens).
-10. **NDRF Emergency Rescue Mode**: Enable disaster responders to isolate vulnerable floors and prioritize rescue targets on a 3D interface.
-11. **Tax & Construction Anomaly Detection**: Cross-reference registered vs. actual detected floors and usage anomalies.
+> **Smart India Hackathon 2026 — Problem Statement SIH26011**  
+> **Ministry of Rural Development • Department of Land Resources (DoLR)**  
+> *Next-generation 3D Cadastral Digital Twin & Volumetric Property Stratification Command Center integrating client-side 2D floorplan footprint extraction, parametric vertical building generation, 3D Geometry Verification, Cadastral Adapter Architecture, and Emergency Disaster Command.*
 
 ---
 
-## 2. System Architecture & Workflows
+## 🏛️ System Architecture & Workflow
 
-```mermaid
-graph TD
-    A[Upload Blueprint / Document] -->|FastAPI Backend| B[OpenCV Boundary / Tesseract OCR]
-    B -->|Database| C[PostgreSQL + PostGIS]
-    C -->|GIS Logic| D[Spatial Validation / Dispute Check]
-    D -->|3D Output| E[CesiumJS WebGL Engine]
-    E -->|Select Floor| F[Inspect ULPIN, Owner & Tax Passport]
+```
+ Architectural Blueprint (PNG / JPG / SVG)
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────┐
+│ 1. Computer-Vision Structural Perimeter Extraction     │
+│    • Morphological structural wall boundary detection   │
+│    • Connected architectural core tracing               │
+│    • Dimension line, compass & title block exclusion   │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ 2. Interactive Calibration & Dimension Review          │
+│    • Real-time SVG vector overlay on blueprint          │
+│    • Verified physical bounds: 18.00m × 14.50m (261 m²) │
+│    • Metric area calculation: 2,809 sq.ft per floor     │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ 3. Parametric Vertical Stacking Engine                  │
+│    • Ground level anchor at 0m elevation                │
+│    • Above-ground strata (F01..F04) + Basements (B01)   │
+│    • Deterministic 3D ULPIN spatial encoding            │
+│      (e.g., 12A34B56C78D90-A003, 12A34B56C78D90-B001)  │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ 4. CesiumJS 3D Geospatial Command Center               │
+│    • 360° Unrestricted camera orbit & basement tilt     │
+│    • Spatially anchored dynamic 3D badge labels         │
+│    • Translucent strata slabs with vertical air-gaps    │
+│    • Unified multi-panel state synchronizer             │
+└──────────────┬───────────────────────────┬──────────────┘
+               │                           │
+               ▼                           ▼
+┌──────────────────────────────┐ ┌──────────────────────────────┐
+│ 5. 3D Geometry Verification  │ │ 6. Disaster Response Engine  │
+│    & Ground-Truth Evidence   │ │    & Emergency Command       │
+│ • Cadastral Adapter registry │ │ • Concentric risk zones      │
+│ • Shoelace / polygon overlap │ │ • Real-time rescue units     │
+│ • Strict provenance labels   │ │ • Dynamic evacuation routes  │
+│ • Deterministic discrepancy  │ │ • Rescue priority algorithm  │
+│   classification (F03 alert) │ │ • Live incident event feed   │
+└──────────────────────────────┘ └──────────────────────────────┘
 ```
 
 ---
 
-## 3. Technology Stack
+## 🎯 Key Capabilities
 
-### **Frontend**
-* **Framework**: Vanilla HTML5, ES6+, Tailwind CSS
-* **Map Engines**: **CesiumJS** (for global 3D GIS tilesets and terrain) and **Three.js** (for high-performance local blueprint modeling)
-* **API Utilities**: QR Code generators, custom WebGL projection layers
+### 1. 📐 Blueprint-to-3D Digital Twin Ingestion
+- Ingests 2D architectural floorplans (PNG, JPG, SVG).
+- Automatically isolates the building perimeter using morphological thresholding.
+- Calibrates metric dimensions ($18.00\text{ m} \times 14.50\text{ m} \to 261\text{ m}^2 / 2,809\text{ sq.ft}$).
+- Instant parametric generation of multi-story buildings and subterranean basements with custom floor heights.
 
-### **Backend**
-* **Framework**: **FastAPI** (Python 3.10+)
-* **Database Driver**: SQLAlchemy, psycopg2
+### 2. 🌐 High-Performance CesiumJS 3D Command Center
+- Spatially indexed 3D floor strata rendered with high-contrast tactical styling.
+- **360° Free Camera Orbit**: Seamless horizontal rotation, vertical tilt, zoom, and pan around the structure.
+- **Subterranean Inspection**: Collision-free camera navigation below ground level for basement ($B01$) inspection.
+- Spatially anchored billboard labels displaying floor ID, occupancy status, and disaster priority.
 
-### **Database**
-* **Engine**: **PostgreSQL 15+** with **PostGIS** spatial extension for coordinate systems and overlap query analysis.
+### 3. ⚖️ 3D Geometry Verification & Ground-Truth Evidence
+- **Strict Provenance Separation**: Explicit distinction between `REGISTERED CADASTRAL DATA` (government records), `3D MODEL-DERIVED DATA` (digital twin measurements), and `GROUND-TRUTH SENSOR DATA` (LiDAR/drone).
+- **Automated Geometry Analysis**: Calculates 2D footprint area (Shoelace formula), perimeter, bounding dimensions, polygon overlap percentage, and boundary deviations.
+- **Deterministic Discrepancy Classification**: Identifies `MATCH`, `MINOR_DEVIATION`, `BOUNDARY_MISMATCH`, `AREA_MISMATCH`, `MAJOR_SPATIAL_MISMATCH`, and `INSUFFICIENT_GEOMETRY`.
+- Accurately flags anomalies such as **Floor 03** ($+2,349\text{ sq.ft} / +510.65\%$ variance against registered $460\text{ sq.ft}$ cadastral entry).
 
-### **AI/ML**
-* **Image Processing**: OpenCV (contour tracking & boundary extraction)
-* **Optical Character Recognition**: Tesseract OCR
-* **Anomaly Detection**: Scikit-learn classification
+### 4. 🔌 Pluggable Cadastral Adapter Architecture
+- **Provider Interface**: Standardized cadastral record schema including ULPIN, parcel ID, floor/strata ID, registered area, use type, and ownership metadata.
+- **Mock Cadastral Provider**: High-fidelity benchmark data with provenance tags.
+- **External Cadastral Provider**: Future-ready adapter interface returning graceful `NOT_CONNECTED` states without mock data contamination.
+
+### 5. 🚨 Disaster Response & Rescue Priority Engine
+- **Concentric Geodetic Risk Zones**: Zone A (Critical, $50\text{m}$), Zone B (Moderate, $100\text{m}$), Zone C (Advisory, $150\text{m}$).
+- **Rescue Unit Telemetry**: Live status tracking for search & rescue teams, drone reconnaissance, and paramedic squads.
+- **Dynamic Evacuation Routing**: 3D corridor visualization to designated emergency assembly points.
+- **Automated Rescue Priority Queue**: Multi-factor scoring ($P1 \dots P4$) computing floor vulnerability based on occupancy, mobility constraints, structural damage, and fire hazards.
+- **Live Incident Stream**: Interactive dispatcher activity feed for real-time field event logging.
 
 ---
 
-## 4. Repository Directory Structure
+## 📁 Repository Structure
 
-The repository is structured to separate concern areas for the backend API, the WebGL frontend, AI modules, and database schemas:
-
-```text
-3D-ULPIN-Vertical-Property-Mapping/
-│
-├── frontend/                     # Static WebGL viewer interface (Deployed to Firebase)
-│   ├── app.js                    # Cesium rendering pipeline & interactivity handlers
-│   ├── index.html                # GIS control panel dashboard and layout
-│   └── sample_blueprint.png      # Default model schematic for demo uploads
-│
-├── backend/                      # FastAPI core services
-│   ├── app/                      # Backend code and business logic
-│   ├── api/                      # REST API endpoints & schemas
-│   ├── core/                     # ULPIN generator, tax engine, PostGIS validator
-│   ├── db/                       # PostgreSQL configuration and models
-│   ├── tests/                    # Unit testing suite (pytest)
-│   └── requirements.txt          # Python package dependencies
-│
-├── ai-model/                     # Python scripts for automated computer vision & OCR
-│   ├── ocr_reader.py             # Document reading OCR pipeline
-│   ├── vision_ai.py              # Contour extraction engine
-│   ├── tax_anomaly.py            # Registered vs detected floor inspector
-│   └── utility_estimator.py      # Resource-based occupancy analysis
-│
-├── data/                         # Sample datasets
-│   └── sample_blueprint.png      # Sample blueprint images
-│
-├── docs/                         # Engineering architecture & schemas
-│
-└── README.md                     # Project documentation
+```
+SIH-Hackathon/
+├── .gitignore
+├── README.md
+└── frontend/
+    ├── src/
+    │   ├── cesium/                     # CesiumJS 3D viewer, layers, camera & disaster rendering
+    │   │   ├── disaster/               # Risk zones, rescue units, evacuation routes
+    │   │   ├── interaction/            # Raycasting & entity click handler
+    │   │   ├── BuildingLayer.ts        # Building shell & bounding volume
+    │   │   ├── CameraController.ts     # FlyTo, framing, and mode transitions
+    │   │   ├── CesiumViewer.ts         # Main Cesium adapter & screen controller
+    │   │   ├── FloorLayer.ts           # Floor strata slabs & 3D badge labels
+    │   │   └── ParcelLayer.ts          # Cadastral parcel boundary polygon
+    │   ├── components/
+    │   │   ├── command-center/         # TopBar, Command Center view & layout
+    │   │   ├── disaster/               # Disaster View (Priority Queue, Units, Routes, Feed)
+    │   │   ├── floor/                  # Vertical Floor Explorer & strata breakdown
+    │   │   ├── floorplan/              # Blueprint upload, CV detection & calibration modal
+    │   │   ├── property/               # Property Explorer, Intelligence & Evidence Panel
+    │   │   ├── ui/                     # CesiumMount, search fields, status badges, map controls
+    │   │   └── ulpin/                  # 3D ULPIN Card & copy utilities
+    │   ├── data/                       # Benchmark cadastral dataset (KA-BLR-DEMO-001)
+    │   ├── hooks/                      # State management & Cesium adapter lifecycle hooks
+    │   ├── services/
+    │   │   ├── cadastral/              # Cadastral registry & provider adapters
+    │   │   ├── disaster/               # Rescue priority engine & evacuation services
+    │   │   ├── footprint/              # Morphological floorplan detector
+    │   │   ├── generator/              # Parametric 3D property generator
+    │   │   └── verification/           # Geometry verification engine & evidence service
+    │   │       └── __tests__/          # Deterministic geometry verification unit tests
+    │   ├── types/                      # TypeScript definitions (ULPIN, disaster, cadastral, etc.)
+    │   └── utils/                      # Coordinate math, status helpers, color palettes
+    ├── public/
+    │   └── cesium/                     # CesiumJS static assets & Web Workers
+    ├── index.html
+    ├── package.json
+    ├── package-lock.json
+    ├── vite.config.ts
+    ├── tsconfig.json
+    ├── tsconfig.app.json
+    ├── tsconfig.node.json
+    ├── tailwind.config.js
+    ├── postcss.config.js
+    └── eslint.config.js
 ```
 
 ---
 
-## 5. Key Features Implemented
+## 🚀 Getting Started
 
-* **Millimeter-Precise OSM Footprint Sync**: Queries the **OpenStreetMap Overpass API** at the click point, extracting the actual coordinate geometry representing the building's exterior walls. This transforms procedural geometries into the exact architectural boundary of the building.
-* **Upright Label Systems**: Floating upright 3D billboard labels that stay parallel to the screen space without tilting or clipping when rotating the map.
-* **Tile-Aware Camera Flights**: Camera movements are synced to Cesium's `tileLoadProgressEvent` to prevent flight starts before map textures are rendered.
-* **Robust Local Verification**: Fully verified backend structure with 20 unit tests ensuring reliability.
+### 1. Prerequisites
+- **Node.js**: `v18.0.0` or higher
+- **npm**: `v9.0.0` or higher
 
----
-
-## 6. How to Run Locally
-
-### **1. Clone the Repository**
+### 2. Installation & Running
 ```bash
-git clone https://github.com/Meghna6111/3D-ULPIN-Vertical-Property-Mapping.git
-cd 3D-ULPIN-Vertical-Property-Mapping
+# Clone the repository
+git clone https://github.com/akashgamerz6575-spec/SIH-Hackathon.git
+cd SIH-Hackathon/frontend
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
 ```
 
-### **2. Run Backend APIs**
-1. Navigate to the backend directory and set up a Python virtual environment:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/Scripts/activate   # On Windows: .\venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-2. Start the FastAPI development server:
-   ```bash
-   python main.py
-   ```
-   *The Swagger API documentation will be available at `http://127.0.0.1:8000/docs`.*
+Open your browser at `http://localhost:5173`.
 
-### **3. Launch Frontend Dashboard**
-Simply serve the `frontend/` directory using any local web server (e.g. VS Code Live Server, or Python HTTP Server):
+### 3. Running Unit Tests
 ```bash
-cd ../frontend
-python -m http.server 8000
+cd frontend
+npm test
 ```
-Open `http://127.0.0.1:8000/` in your browser.
+*Executes all 11 deterministic geometry verification and cadastral calculation test suites.*
 
----
-
-## 7. 24/7 Cloud Backend Deployment
-
-The Python backend can be deployed 24/7 on the internet (e.g., using **Render**). 
-
-### One-Click Deploy to Render
-
-You can easily deploy the FastAPI backend using Render's Blueprint service by linking your GitHub repository:
-
-1. Create a free account at [Render](https://render.com).
-2. Click **New** -> **Blueprint**.
-3. Select your repository `Meghna6111/3D-ULPIN-Vertical-Property-Mapping`.
-4. Render will automatically read the `render.yaml` configuration in this repository, provisioning the Python Web Service.
-5. In the Render Dashboard, go to your Web Service settings and add the environment variables:
-   * `MONGODB_URI`: Your MongoDB Atlas cluster connection URI (to store data persistently).
-   * `VITE_CESIUM_ION_TOKEN`: Your Cesium Ion Token.
-6. Once deployed, copy your web service URL (e.g., `https://your-backend.onrender.com`).
-7. Open the Web Application dashboard, paste the URL in the **Production Backend URL** input box inside the left side panel, and click **Save**.
-
----
-
-## 8. Deployment Configuration
-
-The static WebGL frontend is deployed on **Firebase Hosting** under the project ID `propertymap-system`.
-
-To re-deploy changes:
+### 4. TypeScript Type Checking
 ```bash
-# Install Firebase CLI (if not already installed)
-npm install -g firebase-tools
-
-# Log in and deploy
-firebase login
-firebase deploy --non-interactive
+cd frontend
+npx tsc --noEmit -p tsconfig.app.json
 ```
-*Configured files: [firebase.json](file:///c:/Users/anikd/Downloads/SIH-Hackathon-main/firebase.json), [.firebaserc](file:///c:/Users/anikd/Downloads/SIH-Hackathon-main/.firebaserc)*
+
+### 5. Production Build
+```bash
+cd frontend
+npm run build
+```
 
 ---
 
-## 9. Git Branch Strategy
+## 🎮 3D Navigation & Camera Controls
 
-*Development is branch-isolated under `feature/*` branches and reviewed before merging to the `main` branch.*
+| Interaction | Mouse Input | Action Description |
+|---|---|---|
+| **360° Orbit / Rotate** | `Left Click + Drag` | Rotates the camera around the 3D building |
+| **Tilt & Pitch Orbit** | `Right Click + Drag` or `Middle Click + Drag` | Tilts vertically and orbits at any angle |
+| **Pan / Translate** | `Shift + Right Drag` or `Alt + Left Drag` | Pans across the geospatial scene |
+| **Zoom In / Out** | `Scroll Wheel` or `Pinch` | Smoothly zooms toward the cursor target |
+| **Select Floor / Strata** | `Left Click` | Selects floor slab, opens intelligence & syncs state |
+| **Focus Camera** | Top Toolbar "Focus" | Animates camera to currently selected floor |
+| **Home Camera** | Top Toolbar "Home" | Resets camera to standard hero overview |
 
+---
+
+## 📄 License
+Developed for Smart India Hackathon (SIH26011) — Ministry of Rural Development, Department of Land Resources (DoLR).
